@@ -8,7 +8,8 @@ import Card3D from './Card3D';
 import { CardData } from '@/types/card';
 
 
-const THROW_POWER = 1.0; // Multiplier for easy tuning
+const FOLD_IMPULSE_Z = -0.5;
+const FOLD_IMPULSE_Y = 0.005;
 
 interface InteractiveHand3DProps {
     cards: CardData[];
@@ -19,7 +20,6 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold }) 
     const { camera, raycaster, mouse } = useThree();
     const [isDragging, setIsDragging] = useState(false);
     const [dragPos, setDragPos] = useState(new THREE.Vector3(0, 0.2, 3.0));
-    const [velocity, setVelocity] = useState(new THREE.Vector3(0, 0, 0));
     const [isFolded, setIsFolded] = useState(false);
 
     const lastPos = useRef(new THREE.Vector3(0, 0, 0));
@@ -30,9 +30,9 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold }) 
     const thrownCardsRef = useRef<(RapierRigidBody | null)[]>([]);
 
     const defaultPos = new THREE.Vector3(0, 0.2, 3.0);
-    const handSpacing = isDragging ? 0.05 : 1.2; // Stack cards when dragging
+    const handSpacing = isDragging ? 0.05 : 1.2;
 
-    const throwThreshold = 2.6; // Trigger after dragging forward 0.4 units (3.0 -> 2.6)
+    const throwThreshold = 2.0; // TRIGGER DISTANCE INCREASED (3.0 -> 2.0)
 
     useFrame((state, delta) => {
         if (isDragging) {
@@ -46,10 +46,9 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold }) 
                 const nextPos = dragPos.clone().lerp(targetPos, 0.3);
                 setDragPos(nextPos);
 
-                setVelocity(nextPos.clone().sub(lastPos.current).divideScalar(delta));
                 lastPos.current.copy(nextPos);
 
-                // AUTO TRIGGER FOLD when dragged forward
+                // AUTO TRIGGER FOLD 
                 if (nextPos.z < throwThreshold) {
                     setIsDragging(false);
                     setIsFolded(true);
@@ -60,20 +59,20 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold }) 
             setDragPos((prev) => prev.clone().lerp(defaultPos, 0.1));
         }
 
-        // Apply impulse once RigidBodies are mounted
+        // Apply constant impulse when folded
         if (isFolded && !impulseApplied.current) {
             const refs = thrownCardsRef.current;
             if (refs.length === cards.length && refs.every(r => !!r)) {
                 refs.forEach((ref) => {
                     ref.applyImpulse({
-                        x: (Math.random() - 0.5) * 0.02 * THROW_POWER,
-                        y: 0.005 * THROW_POWER,
-                        z: -1.0 * THROW_POWER // Minimal push scaled by THROW_POWER
+                        x: (Math.random() - 0.5) * 0.05, // Slightly more scatter
+                        y: FOLD_IMPULSE_Y,
+                        z: FOLD_IMPULSE_Z
                     }, true);
                     ref.applyTorqueImpulse({
-                        x: -0.002 * THROW_POWER,
-                        y: (Math.random() - 0.5) * 0.005 * THROW_POWER,
-                        z: (Math.random() - 0.5) * 0.002 * THROW_POWER
+                        x: -0.002,
+                        y: (Math.random() - 0.5) * 0.05, // Added Y-axis spin for scattering
+                        z: (Math.random() - 0.5) * 0.01
                     }, true);
                 });
                 impulseApplied.current = true;
@@ -106,7 +105,7 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold }) 
                         restitution={0.3}
                         friction={4.0} // Increased for a more controlled slide
                         linearDamping={4.0} // Stop faster
-                        angularDamping={1.0}
+                        angularDamping={0.5}
                     >
                         <Card3D rank={card.rank} suit={card.suit} />
                     </RigidBody>
