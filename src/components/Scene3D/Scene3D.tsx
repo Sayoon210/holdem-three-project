@@ -6,8 +6,25 @@ import { PerspectiveCamera, Environment, ContactShadows, OrbitControls } from '@
 import { Physics, RigidBody } from '@react-three/rapier';
 import Card3D from '../Card/Card3D';
 import Table3D from '../Table/Table3D';
+import CommunityBoard3D from '../Table/CommunityBoard3D';
+import PlayerHand3D from '../Card/PlayerHand3D';
+import { CardData } from '@/types/card';
 
 const Scene3D: React.FC = () => {
+    // Mock Data for System Verification
+    const mockBoard: CardData[] = [
+        { id: 'c1', rank: 'J', suit: 'D' },
+        { id: 'c2', rank: '10', suit: 'C' },
+        { id: 'c3', rank: '2', suit: 'S' },
+        { id: 'c4', rank: 'A', suit: 'H' },
+        { id: 'c5', rank: 'Q', suit: 'S' },
+    ];
+
+    const mockHand: CardData[] = [
+        { id: 'h1', rank: 'A', suit: 'S' },
+        { id: 'h2', rank: 'K', suit: 'H' },
+    ];
+
     return (
         <div style={{ width: '100vw', height: '100vh', background: '#000' }}>
             <Canvas shadows dpr={[1, 2]}>
@@ -44,16 +61,8 @@ const Scene3D: React.FC = () => {
                     <Physics debug={false}>
                         <Table3D />
 
-                        {/* Player Hole Cards Test */}
-                        <Card3D rank="A" suit="S" position={[-0.6, 0.1, 1.5]} rotation={[-Math.PI / 2.5, 0, 0]} />
-                        <Card3D rank="K" suit="H" position={[0.6, 0.1, 1.5]} rotation={[-Math.PI / 2.5, 0, 0]} />
-
-                        {/* Community Cards (Full Board) Test */}
-                        <Card3D rank="J" suit="D" position={[-2.2, 0.2, -3]} rotation={[-Math.PI / 2.8, 0, 0]} />
-                        <Card3D rank="10" suit="C" position={[-1.1, 0.2, -3]} rotation={[-Math.PI / 2.8, 0, 0]} />
-                        <Card3D rank="2" suit="S" position={[0, 0.2, -3]} rotation={[-Math.PI / 2.8, 0, 0]} />
-                        <Card3D rank="A" suit="H" position={[1.1, 0.2, -3]} rotation={[-Math.PI / 2.8, 0, 0]} />
-                        <Card3D rank="Q" suit="S" position={[2.2, 0.2, -3]} rotation={[-Math.PI / 2.8, 0, 0]} />
+                        <PlayerHand3D cards={mockHand} />
+                        <CommunityBoard3D cards={mockBoard} />
 
                         {/* Physics Test Object: Falling Card */}
                         <RigidBody position={[0, 5, 0]} rotation={[0.5, 0.5, 0.5]}>
