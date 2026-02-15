@@ -8,9 +8,11 @@ import Card3D from '../Card/Card3D';
 import Table3D from '../Table/Table3D';
 import CommunityBoard3D from '../Table/CommunityBoard3D';
 import PlayerHand3D from '../Card/PlayerHand3D';
+import InteractiveHand3D from '../Card/InteractiveHand3D';
 import { CardData } from '@/types/card';
 
 const Scene3D: React.FC = () => {
+    const [isFolded, setIsFolded] = React.useState(false);
     // Mock Data for System Verification
     const mockBoard: CardData[] = [
         { id: 'c1', rank: 'J', suit: 'D' },
@@ -61,13 +63,14 @@ const Scene3D: React.FC = () => {
                     <Physics debug={false}>
                         <Table3D />
 
-                        <PlayerHand3D cards={mockHand} />
+                        <InteractiveHand3D
+                            cards={mockHand}
+                            onFold={() => {
+                                console.log("FOLDED!");
+                                setIsFolded(true);
+                            }}
+                        />
                         <CommunityBoard3D cards={mockBoard} />
-
-                        {/* Physics Test Object: Falling Card */}
-                        <RigidBody position={[0, 5, 0]} rotation={[0.5, 0.5, 0.5]}>
-                            <Card3D rank="7" suit="D" />
-                        </RigidBody>
                     </Physics>
 
                     <ContactShadows
