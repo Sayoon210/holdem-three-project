@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
 import { RigidBody } from '@react-three/rapier';
 import { useGLTF } from '@react-three/drei';
+import CommunityCardSlots from './CommunityCardSlots';
 
 const Table3D: React.FC = () => {
     // Load the model added by user
@@ -13,10 +13,15 @@ const Table3D: React.FC = () => {
             <RigidBody type="fixed" colliders="trimesh">
                 <primitive
                     object={scene}
-                    scale={0.45}
-                    position={[0, -0.4, 0]}
+                    scale={0.12}
+                    position={[0, 0, -3]}
                 />
             </RigidBody>
+
+            {/* Community Card Slots Area */}
+            <group position={[0, 0.01, -3]}>
+                <CommunityCardSlots />
+            </group>
 
             {/* Implicit floor for shadows */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.41, 0]} receiveShadow>
