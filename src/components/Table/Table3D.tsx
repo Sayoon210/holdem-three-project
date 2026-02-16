@@ -23,22 +23,20 @@ const Table3D: React.FC = () => {
                 <CommunityCardSlots />
             </group>
 
-            {/* Large stable physics floor for cards and chips */}
-            <RigidBody type="fixed" colliders="cuboid" friction={3.0}>
-                <mesh position={[0, -0.05, 0]} rotation={[0, 0, 0]}>
-                    <boxGeometry args={[20, 0.1, 20]} />
+            {/* 
+                Large stable physics floor for cards and chips.
+                Covers the entire table surface to avoid any mesh 'bumps' or gaps.
+            */}
+            <RigidBody type="fixed" colliders="cuboid" friction={2.0} restitution={0.2}>
+                <mesh position={[0, 0.005, 0]}>
+                    <cylinderGeometry args={[5.2, 5.2, 0.01, 64]} />
                     <meshStandardMaterial
+                        color="#ffffff"
                         transparent
-                        opacity={0}
+                        opacity={0.05}
                     />
                 </mesh>
             </RigidBody>
-
-            {/* Implicit floor for shadows */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.41, 0]} receiveShadow>
-                <planeGeometry args={[20, 20]} />
-                <meshStandardMaterial color="#050505" opacity={0.5} transparent />
-            </mesh>
         </group>
     );
 };

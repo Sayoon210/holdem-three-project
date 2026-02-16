@@ -71,12 +71,12 @@ const Card3D: React.FC<Card3DProps> = ({
                 <boxGeometry args={[1.0, 1.4, 0.03]} />
 
                 {/* Box Faces: 0:+X, 1:-X, 2:+Y, 3:-Y, 4:+Z(Front), 5:-Z(Back) */}
-                <meshStandardMaterial attach="material-0" color="#ddd" roughness={1} metalness={0} />
-                <meshStandardMaterial attach="material-1" color="#ddd" roughness={1} metalness={0} />
-                <meshStandardMaterial attach="material-2" color="#ddd" roughness={1} metalness={0} />
-                <meshStandardMaterial attach="material-3" color="#ddd" roughness={1} metalness={0} />
-                <meshStandardMaterial attach="material-4" map={cardFrontTexture} roughness={1} metalness={0} />
-                <meshStandardMaterial attach="material-5" map={cardBackTexture} roughness={1} metalness={0} />
+                <meshBasicMaterial attach="material-0" color="#ddd" toneMapped={false} />
+                <meshBasicMaterial attach="material-1" color="#ddd" toneMapped={false} />
+                <meshBasicMaterial attach="material-2" color="#ddd" toneMapped={false} />
+                <meshBasicMaterial attach="material-3" color="#ddd" toneMapped={false} />
+                <meshBasicMaterial attach="material-4" map={cardFrontTexture} toneMapped={false} />
+                <meshBasicMaterial attach="material-5" map={cardBackTexture} toneMapped={false} />
             </mesh>
         </group>
     );

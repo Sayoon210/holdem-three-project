@@ -20,56 +20,81 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
     const rigidBodyRef = useRef<RapierRigidBody>(null);
     const impulseApplied = useRef(false);
 
-    const throwThreshold = 2.0; // Distance from center to trigger betting
+    const TRAY_CENTER = { x: 2.2, z: 3.5 };
+    const TRAY_SIZE = 0.5; // Stay well within the 0.6 walls
+    const throwThreshold = 2.4;
+    const bettingTarget = new THREE.Vector3(0, 0, 0);
+    const physicsWait = useRef(-1);
 
-    useFrame(() => {
+    useFrame((state) => {
         if (isDragging && rigidBodyRef.current) {
-            // Mouse tracking logic (on XZ plane)
-            const planeY = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.5);
+            const planeY = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.7);
             raycaster.setFromCamera(mouse, camera);
             const intersectPos = new THREE.Vector3();
             raycaster.ray.intersectPlane(planeY, intersectPos);
 
             if (intersectPos) {
-                // Smoothly move the chip toward mouse position while dragging
-                const currentPos = rigidBodyRef.current.translation();
-                const targetPos = new THREE.Vector3(intersectPos.x, 0.5, intersectPos.z);
+                // CLAMP Target position to tray boundaries while dragging
+                const clampedX = THREE.MathUtils.clamp(intersectPos.x, TRAY_CENTER.x - TRAY_SIZE, TRAY_CENTER.x + TRAY_SIZE);
+                const clampedZ = THREE.MathUtils.clamp(intersectPos.z, TRAY_CENTER.z - TRAY_SIZE, TRAY_CENTER.z + TRAY_SIZE);
+
+                const targetPos = new THREE.Vector3(clampedX, 0.7, clampedZ);
 
                 rigidBodyRef.current.setTranslation({
-                    x: THREE.MathUtils.lerp(currentPos.x, targetPos.x, 0.2),
-                    y: 0.5,
-                    z: THREE.MathUtils.lerp(currentPos.z, targetPos.z, 0.2)
+                    x: THREE.MathUtils.lerp(rigidBodyRef.current.translation().x, targetPos.x, 0.4),
+                    y: 0.7,
+                    z: THREE.MathUtils.lerp(rigidBodyRef.current.translation().z, targetPos.z, 0.4)
                 }, true);
 
-                // Check for bet trigger
-                const distToCenter = Math.sqrt(targetPos.x ** 2 + targetPos.z ** 2);
-                if (distToCenter < throwThreshold) {
+                // TRIGGER: If mouse moves forward towards center, past the tray wall
+                if (intersectPos.z < throwThreshold) {
                     setIsDragging(false);
                     setIsBet(true);
+
+                    // Exit Box: Move slightly forward and center-ward immediately
+                    rigidBodyRef.current.setTranslation({
+                        x: THREE.MathUtils.lerp(targetPos.x, 0, 0.2),
+                        y: 0.75,
+                        z: throwThreshold - 0.2 // Definitively out of the box
+                    }, true);
+
+                    rigidBodyRef.current.setBodyType(0, true);
+                    rigidBodyRef.current.wakeUp();
+                    physicsWait.current = 4; // Shorter wait for better response
                     if (onBet) onBet();
                 }
             }
         }
 
-        // Apply betting impulse once triggered
-        if (isBet && !impulseApplied.current && rigidBodyRef.current) {
-            const currentPos = rigidBodyRef.current.translation();
-            // Vector pointing toward center
-            const dir = new THREE.Vector3(-currentPos.x, 0.1, -currentPos.z).normalize();
+        // Apply betting velocity
+        if (isBet && physicsWait.current > 0) {
+            physicsWait.current--;
+            rigidBodyRef.current?.wakeUp();
 
-            rigidBodyRef.current.applyImpulse({
-                x: dir.x * 0.1,
-                y: 0.05,
-                z: dir.z * 0.1
-            }, true);
+            if (physicsWait.current === 0 && !impulseApplied.current && rigidBodyRef.current) {
+                const currentPos = rigidBodyRef.current.translation();
+                const dir = new THREE.Vector3()
+                    .copy(bettingTarget)
+                    .sub(new THREE.Vector3(currentPos.x, 0, currentPos.z))
+                    .normalize();
 
-            rigidBodyRef.current.applyTorqueImpulse({
-                x: (Math.random() - 0.5) * 0.005,
-                y: (Math.random() - 0.5) * 0.005,
-                z: (Math.random() - 0.5) * 0.005
-            }, true);
+                // Controlled speed (1/10th feel)
+                const speed = 3.5;
 
-            impulseApplied.current = true;
+                rigidBodyRef.current.setLinvel({
+                    x: dir.x * speed,
+                    y: 0.2,        // Small lift to clear surface
+                    z: dir.z * speed
+                }, true);
+
+                rigidBodyRef.current.setAngvel({
+                    x: (Math.random() - 0.5) * 2,
+                    y: 5.0, // Consistent spin
+                    z: (Math.random() - 0.5) * 2
+                }, true);
+
+                impulseApplied.current = true;
+            }
         }
     });
 
@@ -78,7 +103,8 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
         if (isBet) return;
         setIsDragging(true);
         if (rigidBodyRef.current) {
-            rigidBodyRef.current.setBodyType(2, true); // KinematicPosition while dragging
+            rigidBodyRef.current.setBodyType(2, true);
+            rigidBodyRef.current.wakeUp();
         }
     };
 
@@ -86,21 +112,23 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
         if (isDragging) {
             setIsDragging(false);
             if (rigidBodyRef.current) {
-                rigidBodyRef.current.setBodyType(0, true); // Dynamic on release
+                rigidBodyRef.current.setBodyType(0, true);
+                rigidBodyRef.current.wakeUp();
             }
         }
     };
 
     return (
         <group onPointerDown={handlePointerDown} onPointerUp={handlePointerUp}>
-            {/* We pass the physics logic through this wrapper and customize Chip3D as needed */}
             <RigidBody
                 ref={rigidBodyRef}
                 position={position}
                 rotation={rotation}
                 colliders="cuboid"
-                restitution={0.3}
-                friction={0.8}
+                restitution={0.2}
+                friction={3.0} // Stable friction
+                linearDamping={2.0} // Lowered to ensure chips reach the table center
+                angularDamping={1.0}
             >
                 <ChipModel />
             </RigidBody>
@@ -110,7 +138,7 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
 
 // Internal chip mesh component (without its own RigidBody)
 const ChipModel: React.FC = () => {
-    const texture = useTexture('/textures/chips/block_tocken_texture.png');
+    const texture = useTexture('/textures/chips/block_token_texture.png');
     return (
         <mesh castShadow receiveShadow>
             <boxGeometry args={[0.22, 0.22, 0.22]} />

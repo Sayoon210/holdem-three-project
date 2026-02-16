@@ -19,7 +19,7 @@ const Chip3D: React.FC<Chip3DProps> = ({
     rotation = [0, 0, 0]
 }) => {
     // Load the new block token texture
-    const texture = useTexture('/textures/chips/block_tocken_texture.png');
+    const texture = useTexture('/textures/chips/block_token_texture.png');
 
     return (
         <RigidBody
@@ -44,6 +44,6 @@ const Chip3D: React.FC<Chip3DProps> = ({
 };
 
 // Pre-load the new texture
-useTexture.preload('/textures/chips/block_tocken_texture.png');
+useTexture.preload('/textures/chips/block_token_texture.png');
 
 export default Chip3D;

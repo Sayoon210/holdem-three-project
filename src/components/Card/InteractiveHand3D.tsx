@@ -19,7 +19,7 @@ interface InteractiveHand3DProps {
 const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold }) => {
     const { camera, raycaster, mouse } = useThree();
     const [isDragging, setIsDragging] = useState(false);
-    const [dragPos, setDragPos] = useState(new THREE.Vector3(0, 0.2, 3.0));
+    const [dragPos, setDragPos] = useState(new THREE.Vector3(0, 0.7, 3.0));
     const [isFolded, setIsFolded] = useState(false);
 
     const lastPos = useRef(new THREE.Vector3(0, 0, 0));
@@ -29,7 +29,7 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold }) 
     // Physics refs for thrown cards
     const thrownCardsRef = useRef<(RapierRigidBody | null)[]>([]);
 
-    const defaultPos = new THREE.Vector3(0, 0.2, 3.0);
+    const defaultPos = new THREE.Vector3(0, 0.7, 3.0);
     const handSpacing = isDragging ? 0.05 : 1.2;
 
     const throwThreshold = 2.0; // TRIGGER DISTANCE INCREASED (3.0 -> 2.0)

@@ -59,17 +59,21 @@ const Scene3D: React.FC = () => {
                     target={[0, 0, 0]} // Center of the table
                 />
 
-                {/* Noir Lighting Setup */}
+                {/* Noir Lighting Setup - Brightened for visibility */}
                 <color attach="background" args={['#000']} />
-                <ambientLight intensity={0.2} />
+                <ambientLight intensity={0.6} />
                 <spotLight
                     position={[0, 15, 0]}
-                    angle={0.4}
+                    angle={0.6}
                     penumbra={1}
-                    intensity={1000}
+                    intensity={2500}
                     castShadow
                     shadow-bias={-0.0001}
                 />
+
+                {/* Dedicated light for player's hand area to remove the dark spot */}
+                <pointLight position={[0, 4, 4]} intensity={50} distance={10} />
+
                 <rectAreaLight
                     width={10}
                     height={10}
