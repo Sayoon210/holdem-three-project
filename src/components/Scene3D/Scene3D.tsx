@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { PerspectiveCamera, Environment, ContactShadows, OrbitControls } from '@react-three/drei';
 import { Physics, RigidBody } from '@react-three/rapier';
@@ -9,10 +9,29 @@ import Table3D from '../Table/Table3D';
 import CommunityBoard3D from '../Table/CommunityBoard3D';
 import PlayerHand3D from '../Card/PlayerHand3D';
 import InteractiveHand3D from '../Card/InteractiveHand3D';
+import Chip3D from '../Chip/Chip3D';
+import InteractiveChip3D from '../Chip/InteractiveChip3D';
 import { CardData } from '@/types/card';
 
 const Scene3D: React.FC = () => {
     const [isFolded, setIsFolded] = React.useState(false);
+
+    // Stabilize chip data so they don't reset on re-renders
+    const chipsData = useMemo(() => {
+        return [...Array(10)].map((_, i) => ({
+            id: `chip-${i}`,
+            position: [
+                (Math.random() - 0.5) * 0.4,
+                0.5 + i * 0.25,
+                (Math.random() - 0.5) * 0.4
+            ] as [number, number, number],
+            rotation: [
+                Math.random() * Math.PI,
+                Math.random() * Math.PI,
+                Math.random() * Math.PI
+            ] as [number, number, number]
+        }));
+    }, []);
     // Mock Data for System Verification
     const mockBoard: CardData[] = [
         { id: 'c1', rank: 'J', suit: 'D' },
@@ -70,6 +89,49 @@ const Scene3D: React.FC = () => {
                                 setIsFolded(true);
                             }}
                         />
+
+                        {/* Chip Tray (Visual Enclosure) to keep chips organized - Moved closer to user */}
+                        <group position={[2.2, 0, 3.5]}>
+                            {/* Walls of the tray */}
+                            <RigidBody type="fixed" colliders="cuboid">
+                                {/* Floor of tray (slightly above table) */}
+                                <mesh position={[0, -0.05, 0]}>
+                                    <boxGeometry args={[1.2, 0.1, 1.2]} />
+                                    <meshStandardMaterial color="#333" transparent opacity={0.3} />
+                                </mesh>
+                                {/* Left Wall */}
+                                <mesh position={[-0.6, 0.4, 0]}>
+                                    <boxGeometry args={[0.05, 0.8, 1.2]} />
+                                    <meshStandardMaterial color="#555" transparent opacity={0.2} />
+                                </mesh>
+                                {/* Right Wall */}
+                                <mesh position={[0.6, 0.4, 0]}>
+                                    <boxGeometry args={[0.05, 0.8, 1.2]} />
+                                    <meshStandardMaterial color="#555" transparent opacity={0.2} />
+                                </mesh>
+                                {/* Back Wall (Near table center) */}
+                                <mesh position={[0, 0.4, -0.6]}>
+                                    <boxGeometry args={[1.2, 0.8, 0.05]} />
+                                    <meshStandardMaterial color="#555" transparent opacity={0.2} />
+                                </mesh>
+                                {/* Front Wall (Closer to user) */}
+                                <mesh position={[0, 0.4, 0.6]}>
+                                    <boxGeometry args={[1.2, 0.8, 0.05]} />
+                                    <meshStandardMaterial color="#555" transparent opacity={0.2} />
+                                </mesh>
+                            </RigidBody>
+
+                            {/* 10 metallic chips dropped into the tray - Stabilized with useMemo */}
+                            {chipsData.map((chip, i) => (
+                                <InteractiveChip3D
+                                    key={chip.id}
+                                    position={chip.position}
+                                    rotation={chip.rotation}
+                                    onBet={() => console.log(`Bet placed with chip ${i}`)}
+                                />
+                            ))}
+                        </group>
+
                         <CommunityBoard3D cards={mockBoard} />
                     </Physics>
 
