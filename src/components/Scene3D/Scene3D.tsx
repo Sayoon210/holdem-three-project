@@ -64,6 +64,8 @@ const Scene3D: React.FC = () => {
 
     // Betting Flow State
     const [playerRoundBet, setPlayerRoundBet] = React.useState(0);
+    const [chipResetTrigger, setChipResetTrigger] = React.useState(0);
+    const [chipConfirmTrigger, setChipConfirmTrigger] = React.useState(0);
 
     // Stable positions for chips to prevent teleporting on re-render
     const stabilizedChips = React.useMemo(() => {
@@ -84,6 +86,20 @@ const Scene3D: React.FC = () => {
         addLog(`Player BET: $100 (Round Total: $${nextBet})`);
     };
 
+    const handleConfirmBet = () => {
+        addLog(`Player CONFIRMED: $${playerRoundBet} moved to permanent pot.`);
+        setPlayerRoundBet(0); // Reset round tracking but keep in PotTotal
+        setChipConfirmTrigger(prev => prev + 1);
+    };
+
+    const handleFold = () => {
+        addLog(`Player FOLD: Refunding current round bet ($${playerRoundBet}) to tray.`);
+        setPotTotal(prev => prev - playerRoundBet);
+        setPlayerRoundBet(0);
+        setChipResetTrigger(prev => prev + 1); // Only non-locked chips will teleport
+        setIsFolded(true);
+    };
+
     const startDealing = async () => {
         if (gameStage !== 'WAITING') return;
 
@@ -92,6 +108,9 @@ const Scene3D: React.FC = () => {
         setDeck(newDeck);
         setDealtCards([]);
         setDebugLogs([]);
+        setIsFolded(false);
+        setPlayerRoundBet(0);
+        setPotTotal(0);
         addLog("--- GAME START ---");
         addLog(`Shuffled Deck: ${newDeck.map(c => `${c.rank}${c.suit}`).join(', ').substring(0, 50)}...`);
 
@@ -168,10 +187,7 @@ const Scene3D: React.FC = () => {
                         <InteractiveHand3D
                             cards={dealtCards.slice(0, visibleHandCount)}
                             deckPosition={DECK_POSITION}
-                            onFold={() => {
-                                addLog("Player FOLDED");
-                                setIsFolded(true);
-                            }}
+                            onFold={handleFold}
                         />
 
                         {/* Chip Tray (Visual Enclosure) - Enlarged for 20 chips */}
@@ -208,13 +224,24 @@ const Scene3D: React.FC = () => {
                             {/* Interactive Chips in the tray area */}
                             {stabilizedChips.map((stack, groupIndex) => (
                                 <group key={groupIndex} position={stack.spawnPos}>
-                                    {Array.from({ length: 4 }).map((_, i) => (
-                                        <InteractiveChip3D
-                                            key={`${groupIndex}-${i}`}
-                                            position={[0, i * 0.08, 0]}
-                                            onBet={handleBet}
-                                        />
-                                    ))}
+                                    {Array.from({ length: 4 }).map((_, i) => {
+                                        const relativeY = i * 0.08;
+                                        // RELATIVE to [2.2, 0, 3.5] -> must be ABSOLUTE for teleport
+                                        const worldX = 2.2 + stack.pos[0];
+                                        const worldY = 0.6 + relativeY; // Settled height for refund (no rain)
+                                        const worldZ = 3.5 + stack.pos[2];
+
+                                        return (
+                                            <InteractiveChip3D
+                                                key={`${groupIndex}-${i}`}
+                                                position={[0, relativeY, 0]}
+                                                initialWorldPos={[worldX, worldY, worldZ]}
+                                                onBet={handleBet}
+                                                resetTrigger={chipResetTrigger}
+                                                confirmTrigger={chipConfirmTrigger}
+                                            />
+                                        );
+                                    })}
                                 </group>
                             ))}
                         </group>
@@ -292,26 +319,28 @@ const Scene3D: React.FC = () => {
                 ) : gameStage === 'PLAYING' && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                         {/* Dynamic Betting Button */}
-                        <button
-                            disabled={playerRoundBet < SIMULATED_MAX_BET}
-                            onClick={() => addLog(`Player ACTION: ${playerRoundBet > SIMULATED_MAX_BET ? 'RAISE' : 'CHECK'}`)}
-                            style={{
-                                background: playerRoundBet < SIMULATED_MAX_BET ? '#444' : '#D4AF37',
-                                color: playerRoundBet < SIMULATED_MAX_BET ? '#888' : '#000',
-                                border: 'none',
-                                padding: '15px 80px',
-                                borderRadius: '4px',
-                                fontSize: '1.8rem',
-                                fontWeight: '900',
-                                cursor: playerRoundBet < SIMULATED_MAX_BET ? 'not-allowed' : 'pointer',
-                                boxShadow: playerRoundBet < SIMULATED_MAX_BET ? 'none' : '0 0 20px rgba(212, 175, 55, 0.4)',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.1em',
-                                transition: 'all 0.2s ease'
-                            }}
-                        >
-                            {playerRoundBet > SIMULATED_MAX_BET ? 'Raise' : 'Check'}
-                        </button>
+                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                            <button
+                                disabled={playerRoundBet < SIMULATED_MAX_BET}
+                                onClick={handleConfirmBet}
+                                style={{
+                                    background: playerRoundBet < SIMULATED_MAX_BET ? '#444' : '#D4AF37',
+                                    color: playerRoundBet < SIMULATED_MAX_BET ? '#888' : '#000',
+                                    border: 'none',
+                                    padding: '15px 80px',
+                                    borderRadius: '4px',
+                                    fontSize: '1.8rem',
+                                    fontWeight: '900',
+                                    cursor: playerRoundBet < SIMULATED_MAX_BET ? 'not-allowed' : 'pointer',
+                                    boxShadow: playerRoundBet < SIMULATED_MAX_BET ? 'none' : '0 0 20px rgba(212, 175, 55, 0.4)',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.1em',
+                                    transition: 'all 0.2s ease'
+                                }}
+                            >
+                                {playerRoundBet > SIMULATED_MAX_BET ? 'Raise' : 'Check'}
+                            </button>
+                        </div>
 
                         {/* Helper hint for matching bet */}
                         {playerRoundBet < SIMULATED_MAX_BET && (

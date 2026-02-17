@@ -135,7 +135,7 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold, de
                         rank={card.rank}
                         suit={card.suit}
                         isFaceDown={isDragging}
-                        position={[xOffset, 0, 0]}
+                        position={[xOffset, index * 0.01, 0]}
                         initialPosition={deckPosition ? [
                             deckPosition[0] - dragPos.x,
                             deckPosition[1] - dragPos.y,

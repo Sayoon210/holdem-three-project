@@ -87,7 +87,7 @@ const Card3D: React.FC<Card3DProps> = ({
                 z: position[2],
                 rotateX: rotation[0] + (isFaceDown ? Math.PI : 0)
             } : false}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            transition={{ type: "spring", stiffness: 400, damping: 40 }} // Increased damping to prevent vibration/jitter
         >
             <mesh castShadow receiveShadow>
                 <boxGeometry args={[1.0, 1.4, 0.02]} />
@@ -103,8 +103,9 @@ const Card3D: React.FC<Card3DProps> = ({
                     map={isFolded ? null : cardFrontTexture}
                     color={isFolded ? "#000" : "#fff"}
                     toneMapped={false}
-                    polygonOffset
-                    polygonOffsetFactor={-1}
+                    polygonOffset={true}
+                    polygonOffsetFactor={-4}
+                    polygonOffsetUnits={-4}
                 />
                 {/* Back face */}
                 <meshBasicMaterial
@@ -112,8 +113,9 @@ const Card3D: React.FC<Card3DProps> = ({
                     map={cardBackTexture}
                     color={isFolded ? "#222" : "#fff"}
                     toneMapped={false}
-                    polygonOffset
-                    polygonOffsetFactor={-1}
+                    polygonOffset={true}
+                    polygonOffsetFactor={-4}
+                    polygonOffsetUnits={-4}
                 />
             </mesh>
         </motion.group>

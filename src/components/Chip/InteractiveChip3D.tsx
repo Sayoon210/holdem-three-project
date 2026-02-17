@@ -8,14 +8,18 @@ import * as THREE from 'three';
 
 interface InteractiveChip3DProps {
     position: [number, number, number];
+    initialWorldPos?: [number, number, number]; // Absolute tray position
     rotation?: [number, number, number];
     onBet?: () => void;
+    resetTrigger?: number; // Refund back to tray
+    confirmTrigger?: number; // Lock into pot (no refund)
 }
 
-const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotation = [0, 0, 0], onBet }) => {
+const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, initialWorldPos, rotation = [0, 0, 0], onBet, resetTrigger, confirmTrigger }) => {
     const { camera, raycaster, mouse } = useThree();
     const [isDragging, setIsDragging] = useState(false);
     const [isBet, setIsBet] = useState(false);
+    const [isLocked, setIsLocked] = useState(false); // New: locked chips stay in pot on fold
     const rigidBodyRef = useRef<RapierRigidBody>(null);
     const impulseApplied = useRef(false);
 
@@ -24,8 +28,40 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
     const throwThreshold = 2.4;
     const bettingTarget = new THREE.Vector3(0, 0, 0);
     const physicsWait = useRef(-1);
+    const lastResetTrigger = useRef(resetTrigger);
+    const lastConfirmTrigger = useRef(confirmTrigger);
 
     useFrame((state) => {
+        // CONFIRM/LOCK LOGIC (Commit to Pot)
+        if (confirmTrigger !== undefined && confirmTrigger !== lastConfirmTrigger.current) {
+            lastConfirmTrigger.current = confirmTrigger;
+            if (isBet) setIsLocked(true); // Once locked, it won't refund
+            return;
+        }
+
+        // RESET/REFUND LOGIC (Fold)
+        if (resetTrigger !== undefined && resetTrigger !== lastResetTrigger.current) {
+            lastResetTrigger.current = resetTrigger;
+
+            // ONLY REFUND IF IT WAS ACTUALLY BET AND NOT LOCKED
+            if (isBet && !isLocked) {
+                setIsBet(false);
+                setIsDragging(false);
+                impulseApplied.current = false;
+                physicsWait.current = -1;
+
+                if (rigidBodyRef.current) {
+                    const targetTeleport = initialWorldPos || position;
+                    rigidBodyRef.current.setTranslation({ x: targetTeleport[0], y: targetTeleport[1], z: targetTeleport[2] }, true);
+                    rigidBodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                    rigidBodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
+                    rigidBodyRef.current.setBodyType(2, true);
+                    setTimeout(() => rigidBodyRef.current?.setBodyType(0, true), 50);
+                }
+            }
+            return;
+        }
+
         if (isDragging && rigidBodyRef.current) {
             const planeY = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.7);
             raycaster.setFromCamera(mouse, camera);
