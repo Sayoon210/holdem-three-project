@@ -14,9 +14,10 @@ const FOLD_IMPULSE_Y = 0.005;
 interface InteractiveHand3DProps {
     cards: CardData[];
     onFold?: () => void;
+    deckPosition?: [number, number, number];
 }
 
-const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold }) => {
+const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold, deckPosition }) => {
     const { camera, raycaster, mouse } = useThree();
     const [isDragging, setIsDragging] = useState(false);
     const [dragPos, setDragPos] = useState(new THREE.Vector3(0, 0.7, 3.0));
@@ -107,7 +108,7 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold }) 
                         linearDamping={4.0} // Stop faster
                         angularDamping={0.5}
                     >
-                        <Card3D rank={card.rank} suit={card.suit} />
+                        <Card3D rank={card.rank} suit={card.suit} isFolded={true} />
                     </RigidBody>
                 ))}
             </group>
@@ -118,8 +119,6 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold }) 
         <group
             ref={groupRef}
             position={[dragPos.x, dragPos.y, dragPos.z]}
-            onPointerDown={handlePointerDown}
-            onPointerUp={handlePointerUp}
         >
 
             {cards.map((card: CardData, index: number) => {
@@ -129,16 +128,25 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold }) 
                         key={card.id}
                         rank={card.rank}
                         suit={card.suit}
-                        isFaceDown={isDragging} // USER: 뒷면이 보여야해
+                        isFaceDown={isDragging}
                         position={[xOffset, 0, 0]}
+                        initialPosition={deckPosition ? [
+                            deckPosition[0] - dragPos.x,
+                            deckPosition[1] - dragPos.y,
+                            deckPosition[2] - dragPos.z
+                        ] : undefined}
                         rotation={isDragging ? [Math.PI / 2, 0, 0] : [-Math.PI / 2.8, 0, 0]}
                     />
                 );
             })}
 
-            {/* Invisible grab area */}
-            <mesh visible={false}>
-                <boxGeometry args={[3, 1.5, 0.1]} />
+            {/* Invisible grab area - Very tight and only listener source */}
+            <mesh
+                visible={false}
+                onPointerDown={handlePointerDown}
+                onPointerUp={handlePointerUp}
+            >
+                <boxGeometry args={[1.5, 0.8, 0.2]} />
             </mesh>
         </group>
     );

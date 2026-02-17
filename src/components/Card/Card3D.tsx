@@ -2,13 +2,16 @@
 
 import React, { useMemo } from 'react';
 import { useTexture } from '@react-three/drei';
+import { motion } from 'framer-motion-3d';
 import * as THREE from 'three';
 
 interface Card3DProps {
     rank?: string; // A, 2, 3, ..., J, Q, K
     suit?: string; // C, H, S, D
     isFaceDown?: boolean;
+    isFolded?: boolean; // When true, front face is hidden and whole card is darkened
     position?: [number, number, number];
+    initialPosition?: [number, number, number];
     rotation?: [number, number, number];
 }
 
@@ -24,7 +27,9 @@ const Card3D: React.FC<Card3DProps> = ({
     rank = 'A',
     suit = 'S',
     isFaceDown = false,
+    isFolded = false,
     position = [0, 0, 0],
+    initialPosition,
     rotation = [0, 0, 0],
 }) => {
     // Load front and back textures
@@ -66,19 +71,46 @@ const Card3D: React.FC<Card3DProps> = ({
     }, [backTexture]);
 
     return (
-        <group position={position} rotation={rotation}>
+        <motion.group
+            position={position}
+            rotation={[
+                rotation[0] + (isFaceDown ? Math.PI : 0),
+                rotation[1],
+                rotation[2]
+            ]}
+            initial={initialPosition ? { x: initialPosition[0], y: initialPosition[1], z: initialPosition[2] } : false}
+            animate={{
+                x: position[0],
+                y: position[1],
+                z: position[2],
+                rotateX: rotation[0] + (isFaceDown ? Math.PI : 0)
+            }}
+            transition={{ type: "spring", stiffness: 100, damping: 20 }}
+        >
             <mesh castShadow receiveShadow>
-                <boxGeometry args={[1.0, 1.4, 0.03]} />
+                <boxGeometry args={[1.0, 1.4, 0.01]} />
 
                 {/* Box Faces: 0:+X, 1:-X, 2:+Y, 3:-Y, 4:+Z(Front), 5:-Z(Back) */}
-                <meshBasicMaterial attach="material-0" color="#ddd" toneMapped={false} />
-                <meshBasicMaterial attach="material-1" color="#ddd" toneMapped={false} />
-                <meshBasicMaterial attach="material-2" color="#ddd" toneMapped={false} />
-                <meshBasicMaterial attach="material-3" color="#ddd" toneMapped={false} />
-                <meshBasicMaterial attach="material-4" map={cardFrontTexture} toneMapped={false} />
-                <meshBasicMaterial attach="material-5" map={cardBackTexture} toneMapped={false} />
+                <meshBasicMaterial attach="material-0" color={isFolded ? "#111" : "#f0f0f0"} toneMapped={false} />
+                <meshBasicMaterial attach="material-1" color={isFolded ? "#111" : "#f0f0f0"} toneMapped={false} />
+                <meshBasicMaterial attach="material-2" color={isFolded ? "#111" : "#f0f0f0"} toneMapped={false} />
+                <meshBasicMaterial attach="material-3" color={isFolded ? "#111" : "#f0f0f0"} toneMapped={false} />
+                {/* Front face: Turned OFF (Pure black) if folded to prevent peaking */}
+                <meshBasicMaterial
+                    attach="material-4"
+                    map={isFolded ? null : cardFrontTexture}
+                    color={isFolded ? "#000" : "#fff"}
+                    toneMapped={false}
+                />
+                {/* Back face: Significantly darkened if folded */}
+                <meshBasicMaterial
+                    attach="material-5"
+                    map={cardBackTexture}
+                    color={isFolded ? "#222" : "#fff"}
+                    toneMapped={false}
+                />
             </mesh>
-        </group>
+        </motion.group>
     );
 };
 

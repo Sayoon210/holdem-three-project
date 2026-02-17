@@ -6,9 +6,10 @@ import { CardData } from '@/types/card';
 
 interface CommunityBoard3DProps {
     cards: CardData[];
+    deckPosition?: [number, number, number];
 }
 
-const CommunityBoard3D: React.FC<CommunityBoard3DProps> = ({ cards }) => {
+const CommunityBoard3D: React.FC<CommunityBoard3DProps> = ({ cards, deckPosition }) => {
     const slotSpacing = 1.1;
     const boardZ = -3;
     const boardY = 0.2; // Tilted elevation
@@ -22,6 +23,7 @@ const CommunityBoard3D: React.FC<CommunityBoard3DProps> = ({ cards }) => {
                     suit={card.suit}
                     isFaceDown={card.isFaceDown}
                     position={[(index - 2) * slotSpacing, boardY, boardZ]}
+                    initialPosition={deckPosition}
                     rotation={[-Math.PI / 2.8, 0, 0]}
                 />
             ))}

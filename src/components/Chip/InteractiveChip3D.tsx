@@ -20,7 +20,7 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
     const impulseApplied = useRef(false);
 
     const TRAY_CENTER = { x: 2.2, z: 3.5 };
-    const TRAY_SIZE = 0.5;
+    const TRAY_SIZE = 0.8;
     const throwThreshold = 2.4;
     const bettingTarget = new THREE.Vector3(0, 0, 0);
     const physicsWait = useRef(-1);
@@ -73,18 +73,18 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
                     .sub(new THREE.Vector3(currentPos.x, 0, currentPos.z))
                     .normalize();
 
-                const speed = 3.5;
+                const speed = 7.0;
 
                 rigidBodyRef.current.setLinvel({
                     x: dir.x * speed,
-                    y: 0.2,
+                    y: 0.4, // Increased vertical bounce slightly
                     z: dir.z * speed
                 }, true);
 
                 rigidBodyRef.current.setAngvel({
-                    x: (Math.random() - 0.5) * 2,
-                    y: 5.0,
-                    z: (Math.random() - 0.5) * 2
+                    x: (Math.random() - 0.5) * 4,
+                    y: 10.0,
+                    z: (Math.random() - 0.5) * 4
                 }, true);
 
                 impulseApplied.current = true;

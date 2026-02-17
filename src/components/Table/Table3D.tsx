@@ -28,7 +28,7 @@ const Table3D: React.FC = () => {
                 Covers the entire table surface to avoid any mesh 'bumps' or gaps.
             */}
             <RigidBody type="fixed" colliders="cuboid" friction={2.0} restitution={0.2}>
-                <mesh position={[0, 0.005, 0]}>
+                <mesh position={[0, 0.005, 0]} visible={false}>
                     <cylinderGeometry args={[5.2, 5.2, 0.01, 64]} />
                     <meshStandardMaterial
                         color="#ffffff"
