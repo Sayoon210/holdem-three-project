@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
-import { useTexture } from '@react-three/drei';
+import { useFrame, useThree, useGraph } from '@react-three/fiber';
+import { useGLTF } from '@react-three/drei';
 import { RigidBody, RapierRigidBody } from '@react-three/rapier';
 import * as THREE from 'three';
-import Chip3D from './Chip3D';
 
 interface InteractiveChip3DProps {
     position: [number, number, number];
@@ -21,7 +20,7 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
     const impulseApplied = useRef(false);
 
     const TRAY_CENTER = { x: 2.2, z: 3.5 };
-    const TRAY_SIZE = 0.5; // Stay well within the 0.6 walls
+    const TRAY_SIZE = 0.5;
     const throwThreshold = 2.4;
     const bettingTarget = new THREE.Vector3(0, 0, 0);
     const physicsWait = useRef(-1);
@@ -34,39 +33,35 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
             raycaster.ray.intersectPlane(planeY, intersectPos);
 
             if (intersectPos) {
-                // CLAMP Target position to tray boundaries while dragging
                 const clampedX = THREE.MathUtils.clamp(intersectPos.x, TRAY_CENTER.x - TRAY_SIZE, TRAY_CENTER.x + TRAY_SIZE);
                 const clampedZ = THREE.MathUtils.clamp(intersectPos.z, TRAY_CENTER.z - TRAY_SIZE, TRAY_CENTER.z + TRAY_SIZE);
 
-                const targetPos = new THREE.Vector3(clampedX, 0.7, clampedZ);
+                const targetPos = new THREE.Vector3(clampedX, 1.2, clampedZ);
 
                 rigidBodyRef.current.setTranslation({
                     x: THREE.MathUtils.lerp(rigidBodyRef.current.translation().x, targetPos.x, 0.4),
-                    y: 0.7,
+                    y: 1.2,
                     z: THREE.MathUtils.lerp(rigidBodyRef.current.translation().z, targetPos.z, 0.4)
                 }, true);
 
-                // TRIGGER: If mouse moves forward towards center, past the tray wall
                 if (intersectPos.z < throwThreshold) {
                     setIsDragging(false);
                     setIsBet(true);
 
-                    // Exit Box: Move slightly forward and center-ward immediately
                     rigidBodyRef.current.setTranslation({
                         x: THREE.MathUtils.lerp(targetPos.x, 0, 0.2),
-                        y: 0.75,
-                        z: throwThreshold - 0.2 // Definitively out of the box
+                        y: 1.25,
+                        z: throwThreshold - 0.2
                     }, true);
 
                     rigidBodyRef.current.setBodyType(0, true);
                     rigidBodyRef.current.wakeUp();
-                    physicsWait.current = 4; // Shorter wait for better response
+                    physicsWait.current = 4;
                     if (onBet) onBet();
                 }
             }
         }
 
-        // Apply betting velocity
         if (isBet && physicsWait.current > 0) {
             physicsWait.current--;
             rigidBodyRef.current?.wakeUp();
@@ -78,18 +73,17 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
                     .sub(new THREE.Vector3(currentPos.x, 0, currentPos.z))
                     .normalize();
 
-                // Controlled speed (1/10th feel)
                 const speed = 3.5;
 
                 rigidBodyRef.current.setLinvel({
                     x: dir.x * speed,
-                    y: 0.2,        // Small lift to clear surface
+                    y: 0.2,
                     z: dir.z * speed
                 }, true);
 
                 rigidBodyRef.current.setAngvel({
                     x: (Math.random() - 0.5) * 2,
-                    y: 5.0, // Consistent spin
+                    y: 5.0,
                     z: (Math.random() - 0.5) * 2
                 }, true);
 
@@ -101,6 +95,10 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
     const handlePointerDown = (e: any) => {
         e.stopPropagation();
         if (isBet) return;
+
+        // Capture pointer to ensure onPointerUp fires even if mouse moves off the mesh
+        e.target.setPointerCapture(e.pointerId);
+
         setIsDragging(true);
         if (rigidBodyRef.current) {
             rigidBodyRef.current.setBodyType(2, true);
@@ -108,8 +106,11 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
         }
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (e: any) => {
         if (isDragging) {
+            // Release pointer capture
+            e.target.releasePointerCapture(e.pointerId);
+
             setIsDragging(false);
             if (rigidBodyRef.current) {
                 rigidBodyRef.current.setBodyType(0, true);
@@ -126,9 +127,11 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
                 rotation={rotation}
                 colliders="cuboid"
                 restitution={0.2}
-                friction={3.0} // Stable friction
-                linearDamping={2.0} // Lowered to ensure chips reach the table center
+                friction={3.0}
+                linearDamping={2.0}
                 angularDamping={1.0}
+                sensor={isDragging}
+                collisionGroups={isDragging ? 0x00000000 : 0x0001ffff}
             >
                 <ChipModel />
             </RigidBody>
@@ -136,20 +139,40 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
     );
 };
 
-// Internal chip mesh component (without its own RigidBody)
 const ChipModel: React.FC = () => {
-    const texture = useTexture('/textures/chips/block_token_texture.png');
+    const { scene } = useGLTF('/models/rounded_cube/scene.gltf');
+
+    // Create a premium Gold material
+    const goldMaterial = React.useMemo(() => {
+        return new THREE.MeshStandardMaterial({
+            color: '#D4AF37',       // Classic Gold
+            metalness: 1.0,         // Metallic
+            roughness: 0.15,        // Polished but not mirror-like
+            envMapIntensity: 1.5    // Pop in the dark scene
+        });
+    }, []);
+
+    // Apply the material to the model via traversal
+    const processedScene = React.useMemo(() => {
+        const clone = scene.clone();
+        clone.traverse((node: any) => {
+            if (node.isMesh) {
+                node.material = goldMaterial;
+                node.castShadow = true;
+                node.receiveShadow = true;
+            }
+        });
+        return clone;
+    }, [scene, goldMaterial]);
+
     return (
-        <mesh castShadow receiveShadow>
-            <boxGeometry args={[0.22, 0.22, 0.22]} />
-            <meshStandardMaterial
-                map={texture}
-                metalness={0.7}
-                roughness={0.2}
-                envMapIntensity={1.2}
-            />
-        </mesh>
+        <primitive
+            object={processedScene}
+            scale={0.12}
+            position={[0, -0.1, 0]}
+        />
     );
 };
 
+useGLTF.preload('/models/rounded_cube/scene.gltf');
 export default InteractiveChip3D;

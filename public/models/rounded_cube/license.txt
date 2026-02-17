@@ -1,0 +1,11 @@
+Model Information:
+* title:	Rounded Cube
+* source:	https://sketchfab.com/3d-models/rounded-cube-e1e49d4e8e3641a6ad111713947de416
+* author:	indikman (https://sketchfab.com/indikman)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Rounded Cube" (https://sketchfab.com/3d-models/rounded-cube-e1e49d4e8e3641a6ad111713947de416) by indikman (https://sketchfab.com/indikman) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

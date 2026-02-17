@@ -2,7 +2,7 @@
 
 import React, { Suspense, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { PerspectiveCamera, Environment, ContactShadows, OrbitControls } from '@react-three/drei';
+import { PerspectiveCamera, Environment, ContactShadows, OrbitControls, useGLTF } from '@react-three/drei';
 import { Physics, RigidBody } from '@react-three/rapier';
 import Card3D from '../Card/Card3D';
 import Table3D from '../Table/Table3D';
@@ -153,5 +153,9 @@ const Scene3D: React.FC = () => {
         </div>
     );
 };
+
+// Pre-load assets
+useGLTF.preload('/models/rounded_cube/scene.gltf');
+useGLTF.preload('/models/pokertable_round/scene.gltf');
 
 export default Scene3D;
