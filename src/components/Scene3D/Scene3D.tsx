@@ -16,6 +16,7 @@ import CardDeck3D from '../Card/CardDeck3D';
 import { CardData, Rank, Suit } from '@/types/card';
 
 const DECK_POSITION: [number, number, number] = [-1.5, 0.4, -1.0];
+const SIMULATED_MAX_BET = 300; // Expected bet to match
 
 // Tray layout positions for chips
 const chipPositions = [
@@ -61,13 +62,26 @@ const Scene3D: React.FC = () => {
     const [dealtCards, setDealtCards] = React.useState<CardData[]>([]);
     const [debugLogs, setDebugLogs] = React.useState<string[]>([]);
 
+    // Betting Flow State
+    const [playerRoundBet, setPlayerRoundBet] = React.useState(0);
+
+    // Stable positions for chips to prevent teleporting on re-render
+    const stabilizedChips = React.useMemo(() => {
+        return chipPositions.map(stack => ({
+            ...stack,
+            spawnPos: [stack.pos[0], 4 + Math.random() * 2, stack.pos[2]] as [number, number, number]
+        }));
+    }, []);
+
     const addLog = (msg: string) => {
         setDebugLogs(prev => [...prev.slice(-100), `[${new Date().toLocaleTimeString()}] ${msg}`]);
     };
 
     const handleBet = () => {
+        const nextBet = playerRoundBet + 100;
         setPotTotal(prev => prev + 100);
-        addLog("Player BET: $100");
+        setPlayerRoundBet(nextBet);
+        addLog(`Player BET: $100 (Round Total: $${nextBet})`);
     };
 
     const startDealing = async () => {
@@ -106,6 +120,7 @@ const Scene3D: React.FC = () => {
         }
 
         addLog("--- BETTING ROUND START ---");
+        setGameStage('PLAYING');
     };
 
     return (
@@ -191,8 +206,8 @@ const Scene3D: React.FC = () => {
                             </RigidBody>
 
                             {/* Interactive Chips in the tray area */}
-                            {chipPositions.map((stack, groupIndex) => (
-                                <group key={groupIndex} position={stack.pos}>
+                            {stabilizedChips.map((stack, groupIndex) => (
+                                <group key={groupIndex} position={stack.spawnPos}>
                                     {Array.from({ length: 4 }).map((_, i) => (
                                         <InteractiveChip3D
                                             key={`${groupIndex}-${i}`}
@@ -244,32 +259,69 @@ const Scene3D: React.FC = () => {
                 </EffectComposer>
             </Canvas>
 
-            {/* START GAME Button */}
-            {gameStage === 'WAITING' && (
-                <button
-                    onClick={startDealing}
-                    style={{
-                        position: 'absolute',
-                        bottom: '100px',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        background: '#D4AF37',
-                        color: '#000',
-                        border: 'none',
-                        padding: '15px 60px',
-                        borderRadius: '4px',
-                        fontSize: '1.5rem',
-                        fontWeight: '900',
-                        cursor: 'pointer',
-                        boxShadow: '0 0 20px rgba(212, 175, 55, 0.4)',
-                        zIndex: 1000,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.2em'
-                    }}
-                >
-                    Start Game
-                </button>
-            )}
+            {/* GAME ACTION UI */}
+            <div style={{
+                position: 'absolute',
+                bottom: '100px',
+                right: '40px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: '20px',
+                zIndex: 1000
+            }}>
+                {gameStage === 'WAITING' ? (
+                    <button
+                        onClick={startDealing}
+                        style={{
+                            background: '#D4AF37',
+                            color: '#000',
+                            border: 'none',
+                            padding: '15px 60px',
+                            borderRadius: '4px',
+                            fontSize: '1.5rem',
+                            fontWeight: '900',
+                            cursor: 'pointer',
+                            boxShadow: '0 0 20px rgba(212, 175, 55, 0.4)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.2em'
+                        }}
+                    >
+                        Start Game
+                    </button>
+                ) : gameStage === 'PLAYING' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                        {/* Dynamic Betting Button */}
+                        <button
+                            disabled={playerRoundBet < SIMULATED_MAX_BET}
+                            onClick={() => addLog(`Player ACTION: ${playerRoundBet > SIMULATED_MAX_BET ? 'RAISE' : 'CHECK'}`)}
+                            style={{
+                                background: playerRoundBet < SIMULATED_MAX_BET ? '#444' : '#D4AF37',
+                                color: playerRoundBet < SIMULATED_MAX_BET ? '#888' : '#000',
+                                border: 'none',
+                                padding: '15px 80px',
+                                borderRadius: '4px',
+                                fontSize: '1.8rem',
+                                fontWeight: '900',
+                                cursor: playerRoundBet < SIMULATED_MAX_BET ? 'not-allowed' : 'pointer',
+                                boxShadow: playerRoundBet < SIMULATED_MAX_BET ? 'none' : '0 0 20px rgba(212, 175, 55, 0.4)',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.1em',
+                                transition: 'all 0.2s ease'
+                            }}
+                        >
+                            {playerRoundBet > SIMULATED_MAX_BET ? 'Raise' : 'Check'}
+                        </button>
+
+                        {/* Helper hint for matching bet */}
+                        {playerRoundBet < SIMULATED_MAX_BET && (
+                            <div style={{ color: '#D4AF37', fontSize: '0.9rem', fontWeight: 'bold', textShadow: '0 0 5px #000' }}>
+                                Match ${SIMULATED_MAX_BET - playerRoundBet} to Check
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
 
             {/* Debug UI Overlay */}
             <div style={{

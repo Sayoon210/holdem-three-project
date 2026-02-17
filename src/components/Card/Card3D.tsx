@@ -87,7 +87,7 @@ const Card3D: React.FC<Card3DProps> = ({
                 z: position[2],
                 rotateX: rotation[0] + (isFaceDown ? Math.PI : 0)
             } : false}
-            transition={{ type: "spring", stiffness: 100, damping: 20 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
         >
             <mesh castShadow receiveShadow>
                 <boxGeometry args={[1.0, 1.4, 0.02]} />
