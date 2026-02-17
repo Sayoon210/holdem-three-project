@@ -131,7 +131,7 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({ position, rotatio
                 linearDamping={2.0}
                 angularDamping={1.0}
                 sensor={isDragging}
-                collisionGroups={isDragging ? 0x00000000 : 0x0001ffff}
+                collisionGroups={isDragging ? 0x00000000 : 0x00020003}
             >
                 <ChipModel />
             </RigidBody>
@@ -145,10 +145,12 @@ const ChipModel: React.FC = () => {
     // Create a premium Gold material
     const goldMaterial = React.useMemo(() => {
         return new THREE.MeshStandardMaterial({
-            color: '#D4AF37',       // Classic Gold
-            metalness: 1.0,         // Metallic
-            roughness: 0.15,        // Polished but not mirror-like
-            envMapIntensity: 1.5    // Pop in the dark scene
+            color: '#FFD700',       // Brightened Gold
+            metalness: 1.0,         // Pure Metallic
+            roughness: 0.45,        // Matte/Satin finish (brushed look)
+            envMapIntensity: 2.0,   // Balanced pop
+            emissive: '#221100',    // Very subtle glow
+            emissiveIntensity: 0.2
         });
     }, []);
 

@@ -8,8 +8,8 @@ import Card3D from './Card3D';
 import { CardData } from '@/types/card';
 
 
-const FOLD_IMPULSE_Z = -0.5;
-const FOLD_IMPULSE_Y = 0.005;
+const FOLD_IMPULSE_Z = -0.2;
+const FOLD_IMPULSE_Y = 0.002;
 
 interface InteractiveHand3DProps {
     cards: CardData[];
@@ -107,8 +107,14 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold, de
                         friction={4.0} // Increased for a more controlled slide
                         linearDamping={4.0} // Stop faster
                         angularDamping={0.5}
+                        collisionGroups={0x00040005}
                     >
-                        <Card3D rank={card.rank} suit={card.suit} isFolded={true} />
+                        <Card3D
+                            rank={card.rank}
+                            suit={card.suit}
+                            isFolded={true}
+                            animateEnabled={false}
+                        />
                     </RigidBody>
                 ))}
             </group>
@@ -135,7 +141,7 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold, de
                             deckPosition[1] - dragPos.y,
                             deckPosition[2] - dragPos.z
                         ] : undefined}
-                        rotation={isDragging ? [Math.PI / 2, 0, 0] : [-Math.PI / 2.8, 0, 0]}
+                        rotation={isDragging ? [-Math.PI / 2, 0, 0] : [-Math.PI / 2.8, 0, 0]}
                     />
                 );
             })}

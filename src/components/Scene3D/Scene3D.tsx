@@ -1,8 +1,9 @@
 'use client';
 
 import React, { Suspense, useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { PerspectiveCamera, Environment, ContactShadows, OrbitControls, useGLTF } from '@react-three/drei';
+import { EffectComposer, Bloom, Noise, Vignette } from '@react-three/postprocessing';
 import { Physics, RigidBody } from '@react-three/rapier';
 import Card3D from '../Card/Card3D';
 import Table3D from '../Table/Table3D';
@@ -12,9 +13,41 @@ import InteractiveHand3D from '../Card/InteractiveHand3D';
 import Chip3D from '../Chip/Chip3D';
 import InteractiveChip3D from '../Chip/InteractiveChip3D';
 import CardDeck3D from '../Card/CardDeck3D';
-import { CardData } from '@/types/card';
+import { CardData, Rank, Suit } from '@/types/card';
 
 const DECK_POSITION: [number, number, number] = [-1.5, 0.4, -1.0];
+
+// Tray layout positions for chips
+const chipPositions = [
+    { pos: [-0.4, 0, -0.4] as [number, number, number] },
+    { pos: [0.4, 0, -0.4] as [number, number, number] },
+    { pos: [-0.4, 0, 0.4] as [number, number, number] },
+    { pos: [0.4, 0, 0.4] as [number, number, number] },
+    { pos: [0, 0, 0] as [number, number, number] },
+];
+
+const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] as Rank[];
+const SUITS = ['S', 'H', 'D', 'C'] as Suit[];
+
+const generateDeck = (): CardData[] => {
+    const deck: CardData[] = [];
+    let id = 0;
+    for (const suit of SUITS) {
+        for (const rank of RANKS) {
+            deck.push({ id: `card-${id++}`, rank, suit, isFaceDown: true });
+        }
+    }
+    return deck;
+};
+
+const shuffleDeck = (deck: CardData[]): CardData[] => {
+    const shuffled = [...deck];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+};
 
 const Scene3D: React.FC = () => {
     const [isFolded, setIsFolded] = React.useState(false);
@@ -23,97 +56,94 @@ const Scene3D: React.FC = () => {
     const [visibleHandCount, setVisibleHandCount] = React.useState(0);
     const [visibleBoardCount, setVisibleBoardCount] = React.useState(0);
 
+    // Deck & Debug State
+    const [deck, setDeck] = React.useState<CardData[]>([]);
+    const [dealtCards, setDealtCards] = React.useState<CardData[]>([]);
+    const [debugLogs, setDebugLogs] = React.useState<string[]>([]);
+
+    const addLog = (msg: string) => {
+        setDebugLogs(prev => [...prev.slice(-100), `[${new Date().toLocaleTimeString()}] ${msg}`]);
+    };
+
     const handleBet = () => {
         setPotTotal(prev => prev + 100);
+        addLog("Player BET: $100");
     };
 
     const startDealing = async () => {
         if (gameStage !== 'WAITING') return;
+
+        // 1. Prepare Deck
+        const newDeck = shuffleDeck(generateDeck());
+        setDeck(newDeck);
+        setDealtCards([]);
+        setDebugLogs([]);
+        addLog("--- GAME START ---");
+        addLog(`Shuffled Deck: ${newDeck.map(c => `${c.rank}${c.suit}`).join(', ').substring(0, 50)}...`);
+
         setGameStage('DEALING');
 
-        // Deal 2 hole cards
+        // 2. Deal 2 hole cards
+        const hand = newDeck.slice(0, 2);
+        setDealtCards(prev => [...prev, ...hand]);
         for (let i = 1; i <= 2; i++) {
             await new Promise(r => setTimeout(r, 600));
             setVisibleHandCount(i);
+            addLog(`DEAL Hole ${i}: ${hand[i - 1].rank}-${hand[i - 1].suit}`);
         }
 
         // Delay before flop
         await new Promise(r => setTimeout(r, 800));
 
-        // Deal Community cards (seq)
+        // 3. Deal Community cards (seq)
+        const board = newDeck.slice(2, 7);
+        setDealtCards(prev => [...prev, ...board]);
         for (let i = 1; i <= 5; i++) {
             await new Promise(r => setTimeout(r, 500));
             setVisibleBoardCount(i);
+            const stageName = i <= 3 ? `Flop ${i}` : (i === 4 ? 'Turn' : 'River');
+            addLog(`DEAL ${stageName}: ${board[i - 1].rank}-${board[i - 1].suit}`);
         }
 
-        setGameStage('PLAYING');
+        addLog("--- BETTING ROUND START ---");
     };
-
-    // Stabilize chip data so they don't reset on re-renders
-    const chipsData = useMemo(() => {
-        return [...Array(20)].map((_, i) => ({
-            id: `chip-${i}`,
-            position: [
-                (Math.random() - 0.5) * 0.8, // Wider spread for larger tray
-                0.5 + i * 0.25,
-                (Math.random() - 0.5) * 0.8
-            ] as [number, number, number],
-            rotation: [
-                Math.random() * Math.PI,
-                Math.random() * Math.PI,
-                Math.random() * Math.PI
-            ] as [number, number, number]
-        }));
-    }, []);
-    // Mock Data for System Verification
-    const mockBoard: CardData[] = [
-        { id: 'b1', rank: '10', suit: 'D', isFaceDown: true },
-        { id: 'b2', rank: 'J', suit: 'D', isFaceDown: true },
-        { id: 'b3', rank: 'Q', suit: 'D', isFaceDown: true },
-        { id: 'b4', rank: '8', suit: 'S', isFaceDown: true },
-        { id: 'b5', rank: '2', suit: 'H', isFaceDown: true },
-    ];
-
-    const mockHand: CardData[] = [
-        { id: 'h1', rank: 'A', suit: 'S' },
-        { id: 'h2', rank: 'K', suit: 'H' },
-    ];
 
     return (
         <div style={{ width: '100vw', height: '100vh', background: '#000', position: 'relative', overflow: 'hidden' }}>
             <Canvas shadows dpr={[1, 2]}>
-                <PerspectiveCamera makeDefault position={[0, 6, 4]} fov={75} />
+                <PerspectiveCamera
+                    makeDefault
+                    position={[0, 6, 4]}
+                    fov={75}
+                />
                 <OrbitControls
                     enableRotate={false}
                     enablePan={false}
                     enableZoom={true}
                     minDistance={2}
                     maxDistance={15}
-                    target={[0, 0, 0]} // Center of the table
+                    target={[0, 0, 0]}
                 />
 
-                {/* Noir Lighting Setup - Brightened for visibility */}
-                <color attach="background" args={['#000']} />
-                <ambientLight intensity={0.6} />
+                <color attach="background" args={['#050505']} />
+
+                {/* Moodier, softer ambient light */}
+                <ambientLight intensity={0.15} />
+
+                {/* Primary focal light - softer shadows with penumbra */}
                 <spotLight
-                    position={[0, 15, 0]}
-                    angle={0.6}
-                    penumbra={1}
-                    intensity={2500}
+                    position={[0, 10, 0]}
+                    angle={0.4}
+                    penumbra={0.8} // Softer edges
+                    intensity={150} // Slightly dimmed
                     castShadow
+                    shadow-mapSize={[2048, 2048]}
                     shadow-bias={-0.0001}
                 />
 
-                {/* Dedicated light for player's hand area to remove the dark spot */}
-                <pointLight position={[0, 4, 4]} intensity={50} distance={10} />
+                {/* Subtle fill light */}
+                <pointLight position={[5, 5, 5]} intensity={20} color="#ffaa88" />
 
-                <rectAreaLight
-                    width={10}
-                    height={10}
-                    intensity={2}
-                    position={[0, 10, 0]}
-                    rotation={[-Math.PI / 2, 0, 0]}
-                />
 
                 <Suspense fallback={null}>
                     <Physics debug={false}>
@@ -121,10 +151,10 @@ const Scene3D: React.FC = () => {
                         <CardDeck3D />
 
                         <InteractiveHand3D
-                            cards={mockHand.slice(0, visibleHandCount)}
+                            cards={dealtCards.slice(0, visibleHandCount)}
                             deckPosition={DECK_POSITION}
                             onFold={() => {
-                                console.log("FOLDED!");
+                                addLog("Player FOLDED");
                                 setIsFolded(true);
                             }}
                         />
@@ -160,53 +190,58 @@ const Scene3D: React.FC = () => {
                                 </mesh>
                             </RigidBody>
 
-                            {/* 10 metallic chips dropped into the tray - Stabilized with useMemo */}
-                            {chipsData.map((chip, i) => (
-                                <InteractiveChip3D
-                                    key={chip.id}
-                                    position={chip.position}
-                                    rotation={chip.rotation}
-                                    onBet={handleBet}
-                                />
+                            {/* Interactive Chips in the tray area */}
+                            {chipPositions.map((stack, groupIndex) => (
+                                <group key={groupIndex} position={stack.pos}>
+                                    {Array.from({ length: 4 }).map((_, i) => (
+                                        <InteractiveChip3D
+                                            key={`${groupIndex}-${i}`}
+                                            position={[0, i * 0.08, 0]}
+                                            onBet={handleBet}
+                                        />
+                                    ))}
+                                </group>
                             ))}
                         </group>
 
                         <CommunityBoard3D
-                            cards={mockBoard.slice(0, visibleBoardCount)}
+                            cards={dealtCards.slice(2, 2 + visibleBoardCount)}
                             deckPosition={DECK_POSITION}
                         />
 
                         {/* Betting Zone (Pot Area) - 3-sided invisible walls to contain chips */}
-                        <RigidBody type="fixed" colliders="cuboid">
+                        <RigidBody type="fixed" colliders="cuboid" collisionGroups={0x00010007}>
                             {/* North Wall (Opposite to player) */}
                             <mesh position={[0, 0.2, -1.5]}>
                                 <boxGeometry args={[3.0, 0.6, 0.05]} />
-                                <meshStandardMaterial transparent opacity={0.0} />
+                                <meshStandardMaterial transparent opacity={0} />
                             </mesh>
                             {/* West Wall */}
                             <mesh position={[-1.5, 0.2, 0]}>
                                 <boxGeometry args={[0.05, 0.6, 3.0]} />
-                                <meshStandardMaterial transparent opacity={0.0} />
+                                <meshStandardMaterial transparent opacity={0} />
                             </mesh>
                             {/* East Wall */}
                             <mesh position={[1.5, 0.2, 0]}>
                                 <boxGeometry args={[0.05, 0.6, 3.0]} />
-                                <meshStandardMaterial transparent opacity={0.0} />
+                                <meshStandardMaterial transparent opacity={0} />
                             </mesh>
                             {/* 남쪽은 플레이어 구역이므로 비워둠 (던질 수 있게) */}
                         </RigidBody>
                     </Physics>
-
-                    <ContactShadows
-                        opacity={0.7}
-                        scale={15}
-                        blur={2}
-                        far={10}
-                        resolution={256}
-                        color="#000000"
-                    />
-                    <Environment preset="night" />
                 </Suspense>
+
+                {/* Post-processing setup */}
+                <EffectComposer>
+                    <Bloom
+                        intensity={0.5}
+                        luminanceThreshold={0.8}
+                        mipmapBlur
+                        radius={0.6} // Wider, softer bloom
+                    />
+                    <Noise opacity={0.015} />
+                    <Vignette eskil={false} offset={0.1} darkness={1.1} />
+                </EffectComposer>
             </Canvas>
 
             {/* START GAME Button */}
@@ -235,6 +270,36 @@ const Scene3D: React.FC = () => {
                     Start Game
                 </button>
             )}
+
+            {/* Debug UI Overlay */}
+            <div style={{
+                position: 'absolute',
+                top: '20px',
+                left: '20px',
+                width: '300px',
+                maxHeight: '80vh',
+                background: 'rgba(0, 0, 0, 0.7)',
+                color: '#00ff00',
+                fontFamily: 'monospace',
+                fontSize: '0.85rem',
+                padding: '15px',
+                borderRadius: '8px',
+                overflowY: 'auto',
+                pointerEvents: 'auto',
+                zIndex: 2000,
+                borderLeft: '4px solid #00ff00',
+                boxShadow: '0 0 15px rgba(0, 0, 0, 0.5)'
+            }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '10px', color: '#fff', borderBottom: '1px solid #444', paddingBottom: '5px' }}>
+                    DEBUG ENGINE LOGS
+                </div>
+                {debugLogs.length === 0 && <div style={{ opacity: 0.5 }}>Waiting for game start...</div>}
+                {debugLogs.map((log, i) => (
+                    <div key={i} style={{ marginBottom: '4px', wordBreak: 'break-all' }}>
+                        {log}
+                    </div>
+                ))}
+            </div>
 
             {/* POT Counter UI Overlay - Enhanced Visibility */}
             <div style={{

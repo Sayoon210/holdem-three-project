@@ -13,6 +13,7 @@ interface Card3DProps {
     position?: [number, number, number];
     initialPosition?: [number, number, number];
     rotation?: [number, number, number];
+    animateEnabled?: boolean;
 }
 
 const rankMap: Record<string, number> = {
@@ -31,6 +32,7 @@ const Card3D: React.FC<Card3DProps> = ({
     position = [0, 0, 0],
     initialPosition,
     rotation = [0, 0, 0],
+    animateEnabled = true,
 }) => {
     // Load front and back textures
     const frontTexture = useTexture('/assets/cards/playing_cards.png');
@@ -79,35 +81,39 @@ const Card3D: React.FC<Card3DProps> = ({
                 rotation[2]
             ]}
             initial={initialPosition ? { x: initialPosition[0], y: initialPosition[1], z: initialPosition[2] } : false}
-            animate={{
+            animate={animateEnabled ? {
                 x: position[0],
                 y: position[1],
                 z: position[2],
                 rotateX: rotation[0] + (isFaceDown ? Math.PI : 0)
-            }}
+            } : false}
             transition={{ type: "spring", stiffness: 100, damping: 20 }}
         >
             <mesh castShadow receiveShadow>
-                <boxGeometry args={[1.0, 1.4, 0.01]} />
+                <boxGeometry args={[1.0, 1.4, 0.02]} />
 
                 {/* Box Faces: 0:+X, 1:-X, 2:+Y, 3:-Y, 4:+Z(Front), 5:-Z(Back) */}
-                <meshBasicMaterial attach="material-0" color={isFolded ? "#111" : "#f0f0f0"} toneMapped={false} />
-                <meshBasicMaterial attach="material-1" color={isFolded ? "#111" : "#f0f0f0"} toneMapped={false} />
-                <meshBasicMaterial attach="material-2" color={isFolded ? "#111" : "#f0f0f0"} toneMapped={false} />
-                <meshBasicMaterial attach="material-3" color={isFolded ? "#111" : "#f0f0f0"} toneMapped={false} />
-                {/* Front face: Turned OFF (Pure black) if folded to prevent peaking */}
+                <meshBasicMaterial attach="material-0" color={isFolded ? "#111" : "#f0f0f0"} toneMapped={false} polygonOffset polygonOffsetFactor={-1} />
+                <meshBasicMaterial attach="material-1" color={isFolded ? "#111" : "#f0f0f0"} toneMapped={false} polygonOffset polygonOffsetFactor={-1} />
+                <meshBasicMaterial attach="material-2" color={isFolded ? "#111" : "#f0f0f0"} toneMapped={false} polygonOffset polygonOffsetFactor={-1} />
+                <meshBasicMaterial attach="material-3" color={isFolded ? "#111" : "#f0f0f0"} toneMapped={false} polygonOffset polygonOffsetFactor={-1} />
+                {/* Front face */}
                 <meshBasicMaterial
                     attach="material-4"
                     map={isFolded ? null : cardFrontTexture}
                     color={isFolded ? "#000" : "#fff"}
                     toneMapped={false}
+                    polygonOffset
+                    polygonOffsetFactor={-1}
                 />
-                {/* Back face: Significantly darkened if folded */}
+                {/* Back face */}
                 <meshBasicMaterial
                     attach="material-5"
                     map={cardBackTexture}
                     color={isFolded ? "#222" : "#fff"}
                     toneMapped={false}
+                    polygonOffset
+                    polygonOffsetFactor={-1}
                 />
             </mesh>
         </motion.group>
