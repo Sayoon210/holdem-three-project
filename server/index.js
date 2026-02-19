@@ -44,6 +44,19 @@ const shuffleDeck = (deck) => {
     return shuffled;
 };
 
+const moveToNextPlayer = () => {
+    let nextSeat = (gameState.activeSeat + 1) % gameState.seats.length;
+    // Iterate at most seats.length times to find a player
+    for (let i = 0; i < gameState.seats.length; i++) {
+        if (gameState.seats[nextSeat]) {
+            gameState.activeSeat = nextSeat;
+            return true;
+        }
+        nextSeat = (nextSeat + 1) % gameState.seats.length;
+    }
+    return false;
+};
+
 // --- Game State ---
 let gameState = {
     players: {}, // socket.id -> { seat, id, name }
@@ -53,8 +66,10 @@ let gameState = {
     pot: 0,
     stage: 'WAITING',
     visibleBoardCount: 0,
-    activeSeat: 0, // Seat index of the current player
-    roundBets: {} // socket.id -> current round bet
+    activeSeat: 0,
+    highestBet: 0,
+    roundBets: {}, // socket.id -> current round bet
+    roundActionCount: 0
 };
 
 io.on('connection', (socket) => {
@@ -132,42 +147,105 @@ io.on('connection', (socket) => {
             }
         }
 
-        // 2. Deal Community Cards
-        console.log('\n[DEAL] Dealing Community Cards...');
-        const board = [
-            gameState.deck.pop(), gameState.deck.pop(), gameState.deck.pop(),
-            gameState.deck.pop(),
-            gameState.deck.pop()
-        ];
-        gameState.communityCards = board;
-        console.log('[BOARD]', board.map(c => `${c.rank}${c.suit}`).join(', '));
-
-        for (let i = 1; i <= 5; i++) {
-            await new Promise(r => setTimeout(r, 800));
-            gameState.communityCards[i - 1].isFaceDown = false;
-            console.log(`[BOARD] Revealed card ${i}: ${board[i - 1].rank}${board[i - 1].suit}`);
-            io.emit('deal_public', { cards: gameState.communityCards });
+        // 2. Deal Community Cards (ALL FACE DOWN)
+        console.log('\n[DEAL] Dealing 5 Community Cards (Hidden)...');
+        const board = [];
+        for (let i = 0; i < 5; i++) {
+            const card = gameState.deck.pop();
+            card.isFaceDown = true;
+            board.push(card);
         }
+        gameState.communityCards = board;
+        io.emit('deal_public', { cards: gameState.communityCards });
 
         gameState.stage = 'PLAYING';
-        gameState.activeSeat = 0; // South starts by default
+        gameState.activeSeat = 0; // SB starts Pre-flop
+        gameState.highestBet = 0;
+        gameState.roundBets = {};
+        gameState.roundActionCount = 0;
+
         io.emit('game_stage_change', { stage: 'PLAYING' });
+        io.emit('new_round', { stage: 'PRE_FLOP', activeSeat: 0 });
         io.emit('turn_change', { seat: gameState.activeSeat });
+        io.emit('highest_bet_update', { highestBet: 0 });
         console.log('===== STAGE: PLAYING (Turn: 0) =====\n');
     });
 
     socket.on('player_action', (data) => {
-        // data: { type: 'bet' | 'fold', seat: number }
-        console.log(`[ACTION] Seat ${data.seat}: ${data.type}`);
+        // data: { type: 'bet' | 'fold' | 'check' | 'call' | 'raise', seat: number, amount?: number }
+        const player = gameState.players[socket.id];
+        if (!player || player.seat !== gameState.activeSeat) return;
 
-        if (data.type === 'bet') {
-            gameState.pot += 100;
-            io.emit('pot_update', { pot: gameState.pot });
+        console.log(`[ACTION] Seat ${data.seat}: ${data.type} (${data.amount || 0})`);
+
+        if (data.type === 'fold') {
+            const winnerSeat = (player.seat + 1) % 2;
+            io.emit('hand_ended', { winner: winnerSeat, pot: gameState.pot });
+
+            // Reset to waiting
+            gameState.stage = 'WAITING';
+            gameState.pot = 0;
+            gameState.communityCards = [];
+            io.emit('game_stage_change', { stage: 'WAITING' });
+            return;
         }
 
-        // Standard Turn Rotation (Simplified for 2 players)
-        gameState.activeSeat = (gameState.activeSeat + 1) % 2;
-        io.emit('turn_change', { seat: gameState.activeSeat });
+        let amount = data.amount || 0;
+        if (data.type === 'raise' || data.type === 'bet' || data.type === 'call') {
+            const currentTotal = (gameState.roundBets[socket.id] || 0) + amount;
+            gameState.roundBets[socket.id] = currentTotal;
+            gameState.pot += amount;
+
+            if (currentTotal > gameState.highestBet) {
+                gameState.highestBet = currentTotal;
+                // Raise reopens the action count for others
+                gameState.roundActionCount = 0;
+                console.log(`[RAISE] Highest bet is now ${gameState.highestBet}. Round reopened.`);
+            }
+        }
+
+        io.emit('pot_update', { pot: gameState.pot });
+        io.emit('highest_bet_update', { highestBet: gameState.highestBet });
+
+        // Update action count
+        gameState.roundActionCount++;
+
+        // Check for round completion
+        const activeSids = gameState.seats.filter(id => id !== null);
+        const allBalanced = activeSids.every(sid => (gameState.roundBets[sid] || 0) === gameState.highestBet);
+        const everyoneActed = gameState.roundActionCount >= activeSids.length;
+
+        if (everyoneActed && allBalanced) {
+            console.log('\n[ROUND] Round complete! Transitioning...');
+
+            // Reveal Flop (if hidden)
+            if (gameState.communityCards[0].isFaceDown) {
+                for (let i = 0; i < 3; i++) {
+                    gameState.communityCards[i].isFaceDown = false;
+                }
+                io.emit('deal_public', { cards: gameState.communityCards });
+
+                // Reset for next betting round
+                gameState.roundActionCount = 0;
+                gameState.highestBet = 0;
+                gameState.roundBets = {};
+
+                // Heads-up: Post-flop, Seat 1 (BB) starts
+                gameState.activeSeat = 1;
+
+                io.emit('highest_bet_update', { highestBet: 0 });
+                io.emit('new_round', { stage: 'FLOP', activeSeat: 1 });
+                io.emit('turn_change', { seat: gameState.activeSeat });
+                console.log('[ROUND] Flop Revealed. Seat 1 to act.');
+                return;
+            }
+        }
+
+        // Standard Turn Rotation
+        if (moveToNextPlayer()) {
+            io.emit('turn_change', { seat: gameState.activeSeat });
+            console.log(`[TURN] Moved to Seat ${gameState.activeSeat}`);
+        }
 
         socket.broadcast.emit('remote_action', data);
     });

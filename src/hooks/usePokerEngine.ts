@@ -13,11 +13,13 @@ export const usePokerEngine = () => {
     const [playersHoleCards, setPlayersHoleCards] = useState<Record<number, CardData[]>>({});
     const [potTotal, setPotTotal] = useState(0);
     const [activePlayerId, setActivePlayerId] = useState(0);
+    const [highestBet, setHighestBet] = useState(0);
     const [debugLogs, setDebugLogs] = useState<string[]>([]);
     const [isDebug, setIsDebug] = useState(false);
 
     // --- Local Player State ---
-    const [playerRoundBet, setPlayerRoundBet] = useState(0);
+    const [previousConfirmedBet, setPreviousConfirmedBet] = useState(0); // Amount already sent to server this round
+    const [playerRoundBet, setPlayerRoundBet] = useState(0); // Total (Confirmed + Unconfirmed in tray)
     const [isFolded, setIsFolded] = useState(false);
 
     // --- Animation Triggers ---
@@ -49,11 +51,13 @@ export const usePokerEngine = () => {
                 setGameStage(data.stage);
                 addLog(`Game Stage: ${data.stage}`);
                 if (data.stage === 'DEALING') {
+                    // Reset EVERYTHING only at the very start of a new hand
                     setCommunityCards([]);
                     setPlayersHoleCards({});
                     setIsFolded(false);
                     setPotTotal(0);
                     setPlayerRoundBet(0);
+                    setPreviousConfirmedBet(0);
                 }
                 break;
 
@@ -104,6 +108,29 @@ export const usePokerEngine = () => {
                 setActivePlayerId(data.seat);
                 addLog(`Turn changed: Seat ${data.seat}`);
                 break;
+
+            case 'highest_bet_update':
+                setHighestBet(data.highestBet);
+                break;
+
+            case 'new_round':
+                addLog(`--- NEW ROUND: ${data.stage} ---`);
+                setPlayerRoundBet(0);
+                setPreviousConfirmedBet(0);
+                // The seat rotation is handled by turn_change usually, 
+                // but we can explicitly set it if provided.
+                if (data.activeSeat !== undefined) setActivePlayerId(data.activeSeat);
+                break;
+
+            case 'hand_ended':
+                addLog(`*** HAND ENDED *** Winner: Seat ${data.winner}, Pot: $${data.pot}`);
+                setGameStage('WAITING');
+                setCommunityCards([]);
+                setPlayersHoleCards({});
+                setPotTotal(0);
+                setPlayerRoundBet(0);
+                setPreviousConfirmedBet(0);
+                break;
         }
     }, [addLog]);
 
@@ -123,13 +150,37 @@ export const usePokerEngine = () => {
     }, [addLog]);
 
     const handleConfirmBet = useCallback(() => {
-        addLog(`Confirming bet: $${playerRoundBet}`);
-        setPlayerRoundBet(0);
-        setChipConfirmTrigger(prev => prev + 1);
-        if (yourSeat !== null) {
-            sendAction({ type: 'bet', seat: yourSeat });
+        const addedAmount = playerRoundBet - previousConfirmedBet;
+
+        let type = 'check';
+        if (playerRoundBet > highestBet) {
+            type = 'raise';
+        } else if (playerRoundBet === highestBet && highestBet > 0) {
+            type = 'call';
+        } else if (playerRoundBet < highestBet) {
+            // Player hasn't matched the bet yet, but we allow partial commitment or "matching"
+            // In most poker, you can't just partial call unless all-in, 
+            // but for this interaction, if they hit "Confirm" and it's less, we can treat as partial or call.
+            // Let's stick to user's "Automatic" logic.
+            if (playerRoundBet > previousConfirmedBet) {
+                type = 'bet'; // Adding chips
+            } else {
+                type = 'check';
+            }
         }
-    }, [addLog, playerRoundBet, sendAction, yourSeat]);
+
+        addLog(`Confirming ${type.toUpperCase()}: Total $${playerRoundBet}`);
+        setChipConfirmTrigger(prev => prev + 1);
+        setPreviousConfirmedBet(playerRoundBet);
+
+        if (yourSeat !== null) {
+            sendAction({
+                type: type,
+                seat: yourSeat,
+                amount: addedAmount // Send the increment
+            });
+        }
+    }, [addLog, playerRoundBet, previousConfirmedBet, highestBet, sendAction, yourSeat]);
 
     const handleFold = useCallback(() => {
         addLog(`Folding...`);
@@ -141,6 +192,31 @@ export const usePokerEngine = () => {
             sendAction({ type: 'fold', seat: yourSeat });
         }
     }, [addLog, playerRoundBet, sendAction, yourSeat]);
+
+    const handleCall = useCallback(() => {
+        const callAmount = highestBet - playerRoundBet;
+        addLog(`Calling: $${callAmount}`);
+        if (yourSeat !== null) {
+            sendAction({ type: 'call', seat: yourSeat });
+        }
+        setPlayerRoundBet(highestBet);
+    }, [addLog, highestBet, playerRoundBet, sendAction, yourSeat]);
+
+    const handleCheck = useCallback(() => {
+        addLog(`Checking...`);
+        if (yourSeat !== null) {
+            sendAction({ type: 'check', seat: yourSeat });
+        }
+    }, [addLog, sendAction, yourSeat]);
+
+    const handleRaise = useCallback((amount: number = 100) => {
+        const total = highestBet + amount;
+        addLog(`Raising to: $${total}`);
+        if (yourSeat !== null) {
+            sendAction({ type: 'raise', seat: yourSeat, amount: amount });
+        }
+        setPlayerRoundBet(total);
+    }, [addLog, highestBet, sendAction, yourSeat]);
 
     const requestStart = useCallback(() => {
         if (gameStage !== 'WAITING') return;
@@ -157,6 +233,7 @@ export const usePokerEngine = () => {
         playersHoleCards,
         potTotal,
         activePlayerId,
+        highestBet,
         playerRoundBet,
         isFolded,
         debugLogs,
@@ -170,6 +247,9 @@ export const usePokerEngine = () => {
         // Actions
         setIsDebug,
         handleBet,
+        handleCall,
+        handleCheck,
+        handleRaise,
         handleConfirmBet,
         handleFold,
         requestStart,

@@ -4,7 +4,7 @@ import React from 'react';
 
 const CommunityCardSlots: React.FC = () => {
     // 5 slots for Flop (3), Turn (1), River (1)
-    const slotSpacing = 1.1;
+    const slotSpacing = 1.4;
     const slots = [-2, -1, 0, 1, 2];
 
     return (
@@ -16,7 +16,7 @@ const CommunityCardSlots: React.FC = () => {
                     position={[xOffset * slotSpacing, 0.01, 0]}
                     receiveShadow
                 >
-                    <planeGeometry args={[1.05, 1.45]} /> {/* Slightly larger than card */}
+                    <planeGeometry args={[1.35, 1.85]} /> {/* Slightly larger than scaled card */}
                     <meshStandardMaterial
                         color="#ffffff"
                         transparent

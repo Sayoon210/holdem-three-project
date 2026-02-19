@@ -10,9 +10,9 @@ interface CommunityBoard3DProps {
 }
 
 const CommunityBoard3D: React.FC<CommunityBoard3DProps> = ({ cards, deckPosition }) => {
-    const slotSpacing = 1.1;
+    const slotSpacing = 1.4; // Increased spacing for larger cards
     const boardZ = 0;
-    const boardY = 0.2; // Tilted elevation
+    const boardY = 0.3; // Tilted elevation - Further increased to be safe
 
     // Board is anchored to Parent [z = -3]. 
     // Deck is at [-1.5, 0.4, -1.0] World.
@@ -31,6 +31,7 @@ const CommunityBoard3D: React.FC<CommunityBoard3DProps> = ({ cards, deckPosition
                     position={[(index - 2) * slotSpacing, boardY, boardZ]}
                     initialPosition={localStartPos}
                     rotation={[-Math.PI / 2, 0, 0]}
+                    scale={1.25}
                 />
             ))}
         </group>

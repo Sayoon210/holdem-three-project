@@ -39,6 +39,7 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({
     const rigidBodyRef = useRef<RapierRigidBody>(null);
     const outerGroupRef = useRef<THREE.Group>(null);
     const impulseApplied = useRef(false);
+    const betSignaledRef = useRef(false); // New: Guard to prevent double onBet calls
 
     // Dynamically calculate world reset position from parent seat's transform
     const getResetPosition = () => {
@@ -106,6 +107,7 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({
                 setIsBet(false);
                 setIsDragging(false);
                 impulseApplied.current = false;
+                betSignaledRef.current = false;
                 physicsWait.current = -1;
 
                 if (rigidBodyRef.current) {
@@ -175,7 +177,10 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({
                     rigidBodyRef.current.setBodyType(0, true);
                     rigidBodyRef.current.wakeUp();
                     physicsWait.current = 4;
-                    if (onBet) onBet();
+                    if (onBet && !betSignaledRef.current) {
+                        betSignaledRef.current = true;
+                        onBet();
+                    }
                 }
             }
         }

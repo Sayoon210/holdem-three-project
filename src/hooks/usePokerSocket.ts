@@ -53,6 +53,18 @@ export const usePokerSocket = (onRemoteAction: (action: any) => void) => {
             actionRef.current?.({ type: 'pot_update', ...data });
         });
 
+        socket.on('highest_bet_update', (data: { highestBet: number }) => {
+            actionRef.current?.({ type: 'highest_bet_update', ...data });
+        });
+
+        socket.on('new_round', (data: { stage: string, activeSeat: number }) => {
+            actionRef.current?.({ type: 'new_round', ...data });
+        });
+
+        socket.on('hand_ended', (data: { winner: number, pot: number }) => {
+            actionRef.current?.({ type: 'hand_ended', ...data });
+        });
+
         socket.on('turn_change', (data: { seat: number }) => {
             actionRef.current?.({ type: 'turn_change', ...data });
         });

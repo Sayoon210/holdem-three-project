@@ -35,10 +35,14 @@ const Scene3D: React.FC = () => {
         remoteBetTriggers,
         setIsDebug,
         handleBet,
+        handleCall,
+        handleCheck,
+        handleRaise,
         handleConfirmBet,
         handleFold,
         requestStart,
-        sendAction
+        sendAction,
+        highestBet
     } = usePokerEngine();
 
     const tableRef = React.useRef<THREE.Group>(null);
@@ -72,6 +76,9 @@ const Scene3D: React.FC = () => {
                     <ContactShadows opacity={0.4} scale={15} blur={2.4} far={4.5} resolution={1024} color="#000000" />
 
                     <Physics debug={isDebug}>
+                        <EffectComposer disableNormalPass>
+                            <Bloom luminanceThreshold={0.8} luminanceSmoothing={0.9} height={300} intensity={0.5} />
+                        </EffectComposer>
                         {/* TABLE UNIT [z = -3] */}
                         <group position={[0, 0, -3]}>
                             <spotLight
@@ -98,14 +105,8 @@ const Scene3D: React.FC = () => {
                             cards={playersHoleCards[0] || []}
                             isTurn={activePlayerId === 0}
                             isLocal={yourSeat === 0}
-                            onBet={() => {
-                                handleBet();
-                                sendAction({ type: 'bet', seat: 0 });
-                            }}
-                            onFold={() => {
-                                handleFold();
-                                sendAction({ type: 'fold', seat: 0 });
-                            }}
+                            onBet={handleBet}
+                            onFold={handleFold}
                             resetTrigger={chipResetTrigger}
                             confirmTrigger={chipConfirmTrigger}
                             remoteBetTrigger={remoteBetTriggers[0]}
@@ -121,14 +122,8 @@ const Scene3D: React.FC = () => {
                             cards={playersHoleCards[1] || []}
                             isTurn={activePlayerId === 1}
                             isLocal={yourSeat === 1}
-                            onBet={() => {
-                                handleBet();
-                                sendAction({ type: 'bet', seat: 1 });
-                            }}
-                            onFold={() => {
-                                handleFold();
-                                sendAction({ type: 'fold', seat: 1 });
-                            }}
+                            onBet={handleBet}
+                            onFold={handleFold}
                             resetTrigger={chipResetTrigger}
                             confirmTrigger={chipConfirmTrigger}
                             remoteBetTrigger={remoteBetTriggers[1]}
@@ -290,13 +285,13 @@ const Scene3D: React.FC = () => {
                                     background: '#D4AF37',
                                     color: '#000',
                                     border: 'none',
-                                    padding: '12px 35px',
+                                    padding: '8px 25px',
                                     borderRadius: '4px',
                                     fontWeight: '900',
                                     cursor: 'pointer',
-                                    fontSize: '1rem',
+                                    fontSize: '0.85rem',
                                     letterSpacing: '0.15em',
-                                    boxShadow: '0 0 20px rgba(212, 175, 55, 0.4)',
+                                    boxShadow: '0 0 15px rgba(212, 175, 55, 0.3)',
                                     transition: 'all 0.2s ease',
                                     textTransform: 'uppercase'
                                 }}
@@ -317,30 +312,32 @@ const Scene3D: React.FC = () => {
                             {activePlayerId === yourSeat && (
                                 <button
                                     onClick={handleConfirmBet}
-                                    disabled={playerRoundBet < SIMULATED_MAX_BET}
+                                    disabled={playerRoundBet < highestBet}
                                     style={{
-                                        background: playerRoundBet < SIMULATED_MAX_BET ? '#222' : '#D4AF37',
-                                        color: playerRoundBet < SIMULATED_MAX_BET ? '#444' : '#000',
-                                        border: playerRoundBet < SIMULATED_MAX_BET ? '1px solid #333' : 'none',
-                                        padding: '12px 40px',
+                                        background: isFolded ? '#111' : (playerRoundBet < highestBet ? '#222' : (playerRoundBet > highestBet ? '#D4AF37' : '#444')),
+                                        color: playerRoundBet < highestBet ? '#555' : '#fff',
+                                        border: playerRoundBet < highestBet ? '1px solid #333' : 'none',
+                                        padding: '10px 30px',
                                         borderRadius: '4px',
-                                        fontSize: '1.1rem',
+                                        fontSize: '0.9rem',
                                         fontWeight: '900',
-                                        cursor: playerRoundBet < SIMULATED_MAX_BET ? 'not-allowed' : 'pointer',
-                                        transition: 'all 0.3s ease',
+                                        cursor: playerRoundBet < highestBet ? 'not-allowed' : 'pointer',
                                         textTransform: 'uppercase',
-                                        letterSpacing: '0.1em'
+                                        letterSpacing: '0.1em',
+                                        boxShadow: playerRoundBet > highestBet ? '0 0 15px rgba(212, 175, 55, 0.3)' : 'none',
+                                        transition: 'all 0.2s ease'
                                     }}
                                 >
-                                    {playerRoundBet >= SIMULATED_MAX_BET ? 'RAISE / CALL' : 'CHECK'}
+                                    {playerRoundBet > highestBet
+                                        ? `RAISE TO $${playerRoundBet}`
+                                        : (highestBet > 0
+                                            ? (playerRoundBet === highestBet ? 'CALL' : `NEED $${highestBet - playerRoundBet} TO CALL`)
+                                            : (playerRoundBet > 0 ? `BET $${playerRoundBet}` : 'CHECK')
+                                        )
+                                    }
                                 </button>
                             )}
                         </div>
-                        {playerRoundBet < SIMULATED_MAX_BET && (
-                            <div style={{ color: '#D4AF37', fontSize: '0.8rem', fontWeight: 'bold', textShadow: '0 0 5px #000' }}>
-                                NEED ${SIMULATED_MAX_BET - playerRoundBet} MORE TO CALL
-                            </div>
-                        )}
                     </div>
                 )}
             </div>
