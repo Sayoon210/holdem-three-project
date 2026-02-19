@@ -98,7 +98,7 @@ const Card3D: React.FC<Card3DProps> = ({
             transition={{ type: "spring", stiffness: 400, damping: 40 }} // Increased damping to prevent vibration/jitter
         >
             <mesh castShadow receiveShadow>
-                <boxGeometry args={[1.0, 1.4, 0.02]} />
+                <boxGeometry args={[1.0, 1.4, 0.005]} />
 
                 {/* Box Faces: 0:+X, 1:-X, 2:+Y, 3:-Y, 4:+Z(Front), 5:-Z(Back) */}
                 <meshBasicMaterial attach="material-0" color={isFolded ? "#111" : "#f0f0f0"} toneMapped={false} polygonOffset polygonOffsetFactor={-1} />

@@ -12,151 +12,36 @@ import InteractiveHand3D from '../Card/InteractiveHand3D';
 import InteractiveChip3D from '../Chip/InteractiveChip3D';
 import CardDeck3D from '../Card/CardDeck3D';
 import PlayerSeat3D from '../Player/PlayerSeat3D';
-import { usePokerSocket } from '../../hooks/usePokerSocket';
-import { CardData, Rank, Suit } from '@/types/card';
+import { usePokerEngine } from '../../hooks/usePokerEngine';
 
 const DECK_POSITION: [number, number, number] = [-1.5, 0.4, -1.0];
-const SIMULATED_MAX_BET = 300; // Expected bet to match
-
-// Table constants moved to component definitions
-
-// Physical Tray Box boundary for betting trigger
-const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] as Rank[];
-const SUITS = ['S', 'H', 'D', 'C'] as Suit[];
-
-const generateDeck = (): CardData[] => {
-    const deck: CardData[] = [];
-    let id = 0;
-    for (const suit of SUITS) {
-        for (const rank of RANKS) {
-            deck.push({ id: `card-${id++}`, rank, suit, isFaceDown: true });
-        }
-    }
-    return deck;
-};
-
-const shuffleDeck = (deck: CardData[]): CardData[] => {
-    const shuffled = [...deck];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-};
+const SIMULATED_MAX_BET = 300;
 
 const Scene3D: React.FC = () => {
-    const [isFolded, setIsFolded] = React.useState(false);
-    const [potTotal, setPotTotal] = React.useState(0);
-    const [gameStage, setGameStage] = React.useState<'WAITING' | 'DEALING' | 'PLAYING'>('WAITING');
-    const [visibleHandCount, setVisibleHandCount] = React.useState(0);
-    const [visibleBoardCount, setVisibleBoardCount] = React.useState(0);
+    const {
+        isConnected,
+        yourSeat,
+        gameStage,
+        communityCards,
+        playersHoleCards,
+        potTotal,
+        activePlayerId,
+        playerRoundBet,
+        isFolded,
+        debugLogs,
+        isDebug,
+        chipResetTrigger,
+        chipConfirmTrigger,
+        remoteBetTriggers,
+        setIsDebug,
+        handleBet,
+        handleConfirmBet,
+        handleFold,
+        requestStart,
+        sendAction
+    } = usePokerEngine();
 
-    // Deck & Debug State
-    const [communityCards, setCommunityCards] = React.useState<CardData[]>([]);
-    const [playersHoleCards, setPlayersHoleCards] = React.useState<Record<number, CardData[]>>({});
-    const [debugLogs, setDebugLogs] = React.useState<string[]>([]);
-
-    // Betting Flow State
-    const [playerRoundBet, setPlayerRoundBet] = React.useState(0);
-    const [chipResetTrigger, setChipResetTrigger] = React.useState(0);
-    const [chipConfirmTrigger, setChipConfirmTrigger] = React.useState(0);
-    const [remoteBetTriggers, setRemoteBetTriggers] = React.useState([0, 0]); // Index 0 for Player 0, Index 1 for Player 1
-    const [isDebug, setIsDebug] = React.useState(false);
-
-    const handleRemoteAction = React.useCallback((data: any) => {
-        if (data.type === 'bet') {
-            setRemoteBetTriggers(prev => {
-                const next = [...prev];
-                next[data.seat] += 1;
-                return next;
-            });
-            addLog(`Remote player (Seat ${data.seat}) bet!`);
-        } else if (data.type === 'fold') {
-            addLog(`Remote player (Seat ${data.seat}) folded.`);
-        } else if (data.type === 'stage_change') {
-            setGameStage(data.stage);
-            addLog(`Game Stage: ${data.stage}`);
-            if (data.stage === 'DEALING') {
-                setCommunityCards([]);
-                setPlayersHoleCards({});
-                setVisibleBoardCount(0);
-                setIsFolded(false);
-                setPotTotal(0);
-                setPlayerRoundBet(0);
-            }
-        } else if (data.type === 'deal_private') {
-            setPlayersHoleCards(prev => {
-                const current = prev[data.seat] || [];
-                const exists = current.findIndex(c => c.id === data.card.id);
-                if (exists !== -1) {
-                    const next = [...current];
-                    next[exists] = data.card;
-                    return { ...prev, [data.seat]: next };
-                }
-                return { ...prev, [data.seat]: [...current, data.card] };
-            });
-            addLog(`Received PRIVATE card for Seat ${data.seat}`);
-        } else if (data.type === 'deal_notify') {
-            setPlayersHoleCards(prev => {
-                const current = prev[data.seat] || [];
-                if (current.some(c => c.id === data.cardId)) return prev;
-
-                const dummy: CardData = {
-                    id: data.cardId,
-                    rank: '?' as any,
-                    suit: '?' as any,
-                    isFaceDown: true
-                };
-                return { ...prev, [data.seat]: [...current, dummy] };
-            });
-            addLog(`Seat ${data.seat} received a card (hidden).`);
-        } else if (data.type === 'deal_public') {
-            setCommunityCards(data.cards);
-        } else if (data.type === 'update_board_count') {
-            setVisibleBoardCount(data.visibleBoardCount);
-        }
-    }, []);
-
-    const { isConnected, yourSeat, sendAction, startGame } = usePokerSocket(handleRemoteAction);
     const tableRef = React.useRef<THREE.Group>(null);
-
-    // Multi-player State
-    const [activePlayerId, setActivePlayerId] = React.useState(0);
-    const [players, setPlayers] = React.useState([
-        { id: 0, name: 'Player 1', cards: [], roundBet: 0 },
-        { id: 1, name: 'Player 2', cards: [], roundBet: 0 },
-    ]);
-
-    const addLog = (msg: string) => {
-        setDebugLogs(prev => [...prev.slice(-100), `[${new Date().toLocaleTimeString()}] ${msg}`]);
-    };
-
-    const handleBet = () => {
-        const nextBet = playerRoundBet + 100;
-        setPotTotal(prev => prev + 100);
-        setPlayerRoundBet(nextBet);
-        addLog(`Player BET: $100 (Round Total: $${nextBet})`);
-    };
-
-    const handleConfirmBet = () => {
-        addLog(`Player CONFIRMED: $${playerRoundBet} moved to permanent pot.`);
-        setPlayerRoundBet(0); // Reset round tracking but keep in PotTotal
-        setChipConfirmTrigger(prev => prev + 1);
-    };
-
-    const handleFold = () => {
-        addLog(`Player FOLD: Refunding current round bet ($${playerRoundBet}) to tray.`);
-        setPotTotal(prev => prev - playerRoundBet);
-        setPlayerRoundBet(0);
-        setChipResetTrigger(prev => prev + 1); // Only non-locked chips will teleport
-        setIsFolded(true);
-    };
-
-    const startDealing = () => {
-        if (gameStage !== 'WAITING') return;
-        startGame();
-        addLog("Requesting Game Start from Server...");
-    };
 
     return (
         <div style={{ width: '100vw', height: '100vh', background: '#000', position: 'relative', overflow: 'hidden' }}>
@@ -176,7 +61,7 @@ const Scene3D: React.FC = () => {
                 />
 
                 {/* DYNAMIC CAMERA CONTROLLER */}
-                <CameraController activePlayerId={activePlayerId} tableRef={tableRef} />
+                <CameraController yourSeat={yourSeat} activePlayerId={activePlayerId} tableRef={tableRef} />
 
                 <color attach="background" args={['#050505']} />
                 <ambientLight intensity={0.15} />
@@ -201,7 +86,7 @@ const Scene3D: React.FC = () => {
                             <Table3D ref={tableRef} />
                             <CardDeck3D position={[-1.5, 0.4, 1.0]} />
                             <CommunityBoard3D
-                                cards={communityCards.slice(0, visibleBoardCount)}
+                                cards={communityCards}
                                 deckPosition={DECK_POSITION}
                             />
                         </group>
@@ -344,7 +229,7 @@ const Scene3D: React.FC = () => {
                     {debugLogs.length === 0 ? (
                         <div style={{ color: '#666', fontStyle: 'italic' }}>Waiting for action...</div>
                     ) : (
-                        debugLogs.map((log, i) => (
+                        debugLogs.map((log: string, i: number) => (
                             <div key={i} style={{
                                 borderLeft: '2px solid #D4AF37',
                                 paddingLeft: '10px',
@@ -400,7 +285,7 @@ const Scene3D: React.FC = () => {
                         </div>
                         {yourSeat === 0 && (
                             <button
-                                onClick={startDealing}
+                                onClick={requestStart}
                                 style={{
                                     background: '#D4AF37',
                                     color: '#000',
@@ -464,7 +349,11 @@ const Scene3D: React.FC = () => {
 };
 
 // Camera Transition Helper
-const CameraController: React.FC<{ activePlayerId: number; tableRef: React.RefObject<THREE.Group | null> }> = ({ activePlayerId, tableRef }) => {
+const CameraController: React.FC<{
+    yourSeat: number | null;
+    activePlayerId: number;
+    tableRef: React.RefObject<THREE.Group | null>
+}> = ({ yourSeat, activePlayerId, tableRef }) => {
     const { camera } = useThree();
 
     useFrame((state, delta) => {
@@ -472,7 +361,9 @@ const CameraController: React.FC<{ activePlayerId: number; tableRef: React.RefOb
         const seat0Pos = new THREE.Vector3(0, 9, 6);
         const seat1Pos = new THREE.Vector3(0, 9, -12);
 
-        const targetPos = activePlayerId === 0 ? seat0Pos : seat1Pos;
+        // ALWAYS stay at YOUR seat if assigned, otherwise follow turn or default to seat 0
+        const seatIndex = yourSeat !== null ? yourSeat : activePlayerId;
+        const targetPos = seatIndex === 0 ? seat0Pos : seat1Pos;
         camera.position.lerp(targetPos, 0.05);
 
         if (tableRef.current) {

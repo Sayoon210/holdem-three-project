@@ -52,7 +52,9 @@ let gameState = {
     communityCards: [],
     pot: 0,
     stage: 'WAITING',
-    visibleBoardCount: 0
+    visibleBoardCount: 0,
+    activeSeat: 0, // Seat index of the current player
+    roundBets: {} // socket.id -> current round bet
 };
 
 io.on('connection', (socket) => {
@@ -140,22 +142,33 @@ io.on('connection', (socket) => {
         gameState.communityCards = board;
         console.log('[BOARD]', board.map(c => `${c.rank}${c.suit}`).join(', '));
 
-        io.emit('deal_public', { cards: board });
-
         for (let i = 1; i <= 5; i++) {
             await new Promise(r => setTimeout(r, 800));
-            gameState.visibleBoardCount = i;
+            gameState.communityCards[i - 1].isFaceDown = false;
             console.log(`[BOARD] Revealed card ${i}: ${board[i - 1].rank}${board[i - 1].suit}`);
-            io.emit('update_board_count', { visibleBoardCount: i });
+            io.emit('deal_public', { cards: gameState.communityCards });
         }
 
         gameState.stage = 'PLAYING';
+        gameState.activeSeat = 0; // South starts by default
         io.emit('game_stage_change', { stage: 'PLAYING' });
-        console.log('===== STAGE: PLAYING =====\n');
+        io.emit('turn_change', { seat: gameState.activeSeat });
+        console.log('===== STAGE: PLAYING (Turn: 0) =====\n');
     });
 
     socket.on('player_action', (data) => {
+        // data: { type: 'bet' | 'fold', seat: number }
         console.log(`[ACTION] Seat ${data.seat}: ${data.type}`);
+
+        if (data.type === 'bet') {
+            gameState.pot += 100;
+            io.emit('pot_update', { pot: gameState.pot });
+        }
+
+        // Standard Turn Rotation (Simplified for 2 players)
+        gameState.activeSeat = (gameState.activeSeat + 1) % 2;
+        io.emit('turn_change', { seat: gameState.activeSeat });
+
         socket.broadcast.emit('remote_action', data);
     });
 

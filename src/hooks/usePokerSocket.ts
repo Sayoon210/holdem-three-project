@@ -7,53 +7,65 @@ export const usePokerSocket = (onRemoteAction: (action: any) => void) => {
     const [yourSeat, setYourSeat] = useState<number | null>(null);
     const [gameState, setGameState] = useState<any>(null);
 
+    const actionRef = useRef(onRemoteAction);
+    actionRef.current = onRemoteAction;
+
     useEffect(() => {
-        // Connect to the local server
         const socket = io('http://localhost:3001');
         socketRef.current = socket;
 
         socket.on('connect', () => {
-            console.log('Connected to socket server');
+            console.log('[SOCKET] Connected');
             setIsConnected(true);
             socket.emit('join_game');
         });
 
         socket.on('init_state', (data: { yourSeat: number }) => {
+            console.log('[SOCKET] Your Seat Assigned:', data.yourSeat);
             setYourSeat(data.yourSeat);
         });
 
         socket.on('remote_action', (data: any) => {
-            onRemoteAction(data);
+            actionRef.current?.(data);
         });
 
         socket.on('game_stage_change', (data: { stage: string }) => {
-            onRemoteAction({ type: 'stage_change', stage: data.stage });
+            actionRef.current?.({ type: 'stage_change', stage: data.stage });
         });
 
         socket.on('deal_private', (data: { card: any, seat: number }) => {
-            onRemoteAction({ type: 'deal_private', ...data });
+            actionRef.current?.({ type: 'deal_private', ...data });
         });
 
         socket.on('deal_notify', (data: { seat: number, cardId: string }) => {
-            onRemoteAction({ type: 'deal_notify', ...data });
+            actionRef.current?.({ type: 'deal_notify', ...data });
         });
 
         socket.on('deal_public', (data: { cards: any[] }) => {
-            onRemoteAction({ type: 'deal_public', cards: data.cards });
+            actionRef.current?.({ type: 'deal_public', cards: data.cards });
         });
 
         socket.on('update_board_count', (data: { visibleBoardCount: number }) => {
-            onRemoteAction({ type: 'update_board_count', ...data });
+            actionRef.current?.({ type: 'update_board_count', ...data });
+        });
+
+        socket.on('pot_update', (data: { pot: number }) => {
+            actionRef.current?.({ type: 'pot_update', ...data });
+        });
+
+        socket.on('turn_change', (data: { seat: number }) => {
+            actionRef.current?.({ type: 'turn_change', ...data });
         });
 
         socket.on('disconnect', () => {
+            console.log('[SOCKET] Disconnected');
             setIsConnected(false);
         });
 
         return () => {
             socket.disconnect();
         };
-    }, [onRemoteAction]);
+    }, []); // Only once on mount
 
     const sendAction = (action: { type: string, amount?: number, seat: number }) => {
         if (socketRef.current) {
