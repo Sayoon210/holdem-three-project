@@ -17,6 +17,7 @@ interface InteractiveHand3DProps {
     deckPosition?: [number, number, number];
     enabled?: boolean;
     rotation?: [number, number, number];
+    isLocal?: boolean;
 }
 
 const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({
@@ -24,7 +25,8 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({
     onFold,
     deckPosition,
     enabled = true,
-    rotation = [0, 0, 0]
+    rotation = [0, 0, 0],
+    isLocal = false
 }) => {
     const { camera, raycaster, mouse } = useThree();
     const [isDragging, setIsDragging] = useState(false);
@@ -135,7 +137,7 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({
                                 key={card.id}
                                 rank={card.rank}
                                 suit={card.suit}
-                                isFaceDown={isDragging}
+                                isFaceDown={!isLocal || isDragging || card.isFaceDown}
                                 position={[xOffset, index * 0.01, 0]}
                                 initialPosition={[deckLocal.x, deckLocal.y, deckLocal.z]}
                                 rotation={isDragging ? [-Math.PI / 2, 0, 0] : [-Math.PI / 2.8, 0, 0]}

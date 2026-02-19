@@ -19,6 +19,7 @@ interface PlayerSeat3DProps {
     deckPosition: [number, number, number];
     remoteBetTrigger?: number;
     enabled?: boolean;
+    isLocal?: boolean;
 }
 
 const CHIP_POSITIONS = [
@@ -41,7 +42,8 @@ const PlayerSeat3D: React.FC<PlayerSeat3DProps> = ({
     isDebug,
     deckPosition,
     remoteBetTrigger,
-    enabled = true
+    enabled = true,
+    isLocal = false
 }) => {
     const chipData = React.useMemo(() => {
         return CHIP_POSITIONS.flatMap((stack, groupIndex) => {
@@ -86,6 +88,7 @@ const PlayerSeat3D: React.FC<PlayerSeat3DProps> = ({
                 onFold={onFold}
                 enabled={enabled}
                 rotation={rotation}
+                isLocal={isLocal}
             />
 
             {/* Chip Tray Interaction Area */}

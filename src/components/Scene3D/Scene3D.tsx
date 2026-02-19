@@ -85,9 +85,31 @@ const Scene3D: React.FC = () => {
                 setPlayerRoundBet(0);
             }
         } else if (data.type === 'deal_private') {
-            setPlayersHoleCards(prev => ({ ...prev, [data.seat]: data.cards }));
-            addLog(`Received Hole Cards for Seat ${data.seat}`);
-            setVisibleHandCount(2); // In this MVP, they appear instantly after deal
+            setPlayersHoleCards(prev => {
+                const current = prev[data.seat] || [];
+                const exists = current.findIndex(c => c.id === data.card.id);
+                if (exists !== -1) {
+                    const next = [...current];
+                    next[exists] = data.card;
+                    return { ...prev, [data.seat]: next };
+                }
+                return { ...prev, [data.seat]: [...current, data.card] };
+            });
+            addLog(`Received PRIVATE card for Seat ${data.seat}`);
+        } else if (data.type === 'deal_notify') {
+            setPlayersHoleCards(prev => {
+                const current = prev[data.seat] || [];
+                if (current.some(c => c.id === data.cardId)) return prev;
+
+                const dummy: CardData = {
+                    id: data.cardId,
+                    rank: '?' as any,
+                    suit: '?' as any,
+                    isFaceDown: true
+                };
+                return { ...prev, [data.seat]: [...current, dummy] };
+            });
+            addLog(`Seat ${data.seat} received a card (hidden).`);
         } else if (data.type === 'deal_public') {
             setCommunityCards(data.cards);
         } else if (data.type === 'update_board_count') {
@@ -190,6 +212,7 @@ const Scene3D: React.FC = () => {
                             rotation={[0, 0, 0]}
                             cards={playersHoleCards[0] || []}
                             isTurn={activePlayerId === 0}
+                            isLocal={yourSeat === 0}
                             onBet={() => {
                                 handleBet();
                                 sendAction({ type: 'bet', seat: 0 });
@@ -212,6 +235,7 @@ const Scene3D: React.FC = () => {
                             rotation={[0, Math.PI, 0]}
                             cards={playersHoleCards[1] || []}
                             isTurn={activePlayerId === 1}
+                            isLocal={yourSeat === 1}
                             onBet={() => {
                                 handleBet();
                                 sendAction({ type: 'bet', seat: 1 });

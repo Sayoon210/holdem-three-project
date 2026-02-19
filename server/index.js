@@ -47,22 +47,21 @@ const shuffleDeck = (deck) => {
 // --- Game State ---
 let gameState = {
     players: {}, // socket.id -> { seat, id, name }
-    seats: [null, null], // Simple 2-seat pool for now
+    seats: [null, null], // Simple 2-seat pool
     deck: [],
     communityCards: [],
     pot: 0,
     stage: 'WAITING',
-    visibleBoardCount: 0,
-    activeSeat: 0
+    visibleBoardCount: 0
 };
 
 io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
+    console.log('[CONN] User joined:', socket.id);
 
     socket.on('join_game', () => {
-        // Find first available seat
         let seat = gameState.seats.indexOf(null);
         if (seat === -1) {
+            console.log('[JOIN] Room Full, rejecting:', socket.id);
             socket.emit('error', { message: 'Room is full' });
             return;
         }
@@ -82,67 +81,91 @@ io.on('connection', (socket) => {
             visibleBoardCount: gameState.visibleBoardCount
         });
 
-        socket.broadcast.emit('player_joined', gameState.players[socket.id]);
-        console.log(`Socket ${socket.id} assigned to Seat ${seat}`);
+        io.emit('player_joined', gameState.players[socket.id]);
+        console.log(`[JOIN] Socket ${socket.id} -> Seat ${seat}. Current pool: ${JSON.stringify(gameState.seats)}`);
     });
 
     socket.on('start_game', async () => {
         if (gameState.stage !== 'WAITING') return;
 
+        console.log('\n===== GAME START =====');
         gameState.stage = 'DEALING';
-        gameState.deck = shuffleDeck(generateDeck());
+        const rawDeck = generateDeck();
+        gameState.deck = shuffleDeck(rawDeck);
+
+        console.log('[DECK] Shuffled 52 cards.');
+        console.log('[DEBUG] Top 10 cards in deck:', gameState.deck.slice(-10).reverse().map(c => `${c.rank}${c.suit}`).join(', '));
+
         gameState.communityCards = [];
         gameState.visibleBoardCount = 0;
-        gameState.pot = 0;
 
         io.emit('game_stage_change', { stage: 'DEALING' });
 
-        // 1. Deal Private Hole Cards
-        // In a real game, each player gets DIFFERENT cards.
-        const activeSockets = Object.keys(gameState.players);
-        for (const socketId of activeSockets) {
-            const playerHoleCards = [gameState.deck.pop(), gameState.deck.pop()];
-            gameState.players[socketId].holeCards = playerHoleCards;
+        // 1. Deal Hole Cards ONE BY ONE
+        for (let round = 0; round < 2; round++) {
+            for (let seatIdx = 0; seatIdx < gameState.seats.length; seatIdx++) {
+                const targetSocketId = gameState.seats[seatIdx];
+                if (!targetSocketId) {
+                    console.log(`[DEAL] Seat ${seatIdx} is empty, skipping.`);
+                    continue;
+                }
 
-            // Send PRIVATE event to this specific player
-            io.to(socketId).emit('deal_private', {
-                cards: playerHoleCards,
-                seat: gameState.players[socketId].seat
-            });
+                const card = gameState.deck.pop();
+                console.log(`[DEAL] Card ${card.rank}${card.suit} (ID: ${card.id}) -> Seat ${seatIdx} (Round ${round + 1})`);
+
+                // 1A. Send REAL info to the owner
+                io.to(targetSocketId).emit('deal_private', {
+                    card,
+                    seat: seatIdx
+                });
+
+                // 1B. Notify EVERYONE (including the owner, client will deduplicate) 
+                // about the card placement so they render a card object.
+                io.emit('deal_notify', {
+                    seat: seatIdx,
+                    cardId: card.id
+                });
+
+                await new Promise(r => setTimeout(r, 500));
+            }
         }
 
-        // Wait for hole card animation
-        await new Promise(r => setTimeout(r, 1500));
-
         // 2. Deal Community Cards
-        gameState.communityCards = [
-            gameState.deck.pop(), gameState.deck.pop(), gameState.deck.pop(), // Flop
-            gameState.deck.pop(), // Turn
-            gameState.deck.pop()  // River
+        console.log('\n[DEAL] Dealing Community Cards...');
+        const board = [
+            gameState.deck.pop(), gameState.deck.pop(), gameState.deck.pop(),
+            gameState.deck.pop(),
+            gameState.deck.pop()
         ];
+        gameState.communityCards = board;
+        console.log('[BOARD]', board.map(c => `${c.rank}${c.suit}`).join(', '));
 
-        io.emit('deal_public', { cards: gameState.communityCards });
+        io.emit('deal_public', { cards: board });
 
         for (let i = 1; i <= 5; i++) {
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => setTimeout(r, 800));
             gameState.visibleBoardCount = i;
+            console.log(`[BOARD] Revealed card ${i}: ${board[i - 1].rank}${board[i - 1].suit}`);
             io.emit('update_board_count', { visibleBoardCount: i });
         }
 
         gameState.stage = 'PLAYING';
         io.emit('game_stage_change', { stage: 'PLAYING' });
+        console.log('===== STAGE: PLAYING =====\n');
     });
 
     socket.on('player_action', (data) => {
+        console.log(`[ACTION] Seat ${data.seat}: ${data.type}`);
         socket.broadcast.emit('remote_action', data);
     });
 
     socket.on('disconnect', () => {
-        console.log('User disconnected:', socket.id);
-        if (gameState.players[socket.id]) {
-            const seat = gameState.players[socket.id].seat;
-            gameState.seats[seat] = null;
+        const player = gameState.players[socket.id];
+        if (player) {
+            console.log(`[DISC] Socket ${socket.id} left Seat ${player.seat}`);
+            gameState.seats[player.seat] = null;
             delete gameState.players[socket.id];
+            io.emit('player_left', { seat: player.seat });
         }
     });
 });

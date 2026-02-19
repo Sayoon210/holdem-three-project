@@ -30,8 +30,12 @@ export const usePokerSocket = (onRemoteAction: (action: any) => void) => {
             onRemoteAction({ type: 'stage_change', stage: data.stage });
         });
 
-        socket.on('deal_private', (data: { cards: any[], seat: number }) => {
+        socket.on('deal_private', (data: { card: any, seat: number }) => {
             onRemoteAction({ type: 'deal_private', ...data });
+        });
+
+        socket.on('deal_notify', (data: { seat: number, cardId: string }) => {
+            onRemoteAction({ type: 'deal_notify', ...data });
         });
 
         socket.on('deal_public', (data: { cards: any[] }) => {
