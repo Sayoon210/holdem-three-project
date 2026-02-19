@@ -72,6 +72,14 @@ const Card3D: React.FC<Card3DProps> = ({
         return tex;
     }, [backTexture]);
 
+    // Explicit disposal to prevent VRAM memory leaks
+    React.useEffect(() => {
+        return () => {
+            cardFrontTexture.dispose();
+            cardBackTexture.dispose();
+        };
+    }, [cardFrontTexture, cardBackTexture]);
+
     return (
         <motion.group
             position={position}

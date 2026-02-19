@@ -4,7 +4,11 @@ import React from 'react';
 import * as THREE from 'three';
 import { useTexture } from '@react-three/drei';
 
-const CardDeck3D: React.FC = () => {
+interface CardDeck3DProps {
+    position?: [number, number, number];
+}
+
+const CardDeck3D: React.FC<CardDeck3DProps> = ({ position = [0, 0, 0] }) => {
     const backTexture = useTexture('/assets/cards/card_backs.png');
 
     const cardBackTexture = React.useMemo(() => {
@@ -15,6 +19,13 @@ const CardDeck3D: React.FC = () => {
         tex.offset.set(0, 0);
         return tex;
     }, [backTexture]);
+
+    // Cleanup to prevent VRAM memory leaks
+    React.useEffect(() => {
+        return () => {
+            cardBackTexture.dispose();
+        };
+    }, [cardBackTexture]);
 
     // A single thicker block for the "stack" to look solid, plus a top decorated card
     return (

@@ -20,7 +20,7 @@ interface InteractiveHand3DProps {
 const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold, deckPosition }) => {
     const { camera, raycaster, mouse } = useThree();
     const [isDragging, setIsDragging] = useState(false);
-    const [dragPos, setDragPos] = useState(new THREE.Vector3(0, 0.7, 3.0));
+    const [dragPos, setDragPos] = useState(new THREE.Vector3(0, 0.7, -0.5));
     const [isFolded, setIsFolded] = useState(false);
 
     const lastPos = useRef(new THREE.Vector3(0, 0, 0));
@@ -30,23 +30,31 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold, de
     // Physics refs for thrown cards
     const thrownCardsRef = useRef<(RapierRigidBody | null)[]>([]);
 
-    const defaultPos = new THREE.Vector3(0, 0.7, 3.0);
+    // Reuse objects to prevent GC pressure in useFrame
+    const tempPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.6), []); // Adjusted offset slightly below hand
+    const tempIntersect = useMemo(() => new THREE.Vector3(), []);
+    const tempTarget = useMemo(() => new THREE.Vector3(), []);
+
+    const defaultPos = new THREE.Vector3(0, 0.7, -0.5);
     const handSpacing = isDragging ? 0.05 : 1.2;
 
-    const throwThreshold = 2.0; // TRIGGER DISTANCE INCREASED (3.0 -> 2.0)
+    const throwThreshold = -1.5; // Adjusted z for parent at 3.5
 
     useFrame((state, delta) => {
         if (isDragging) {
-            const planeY = new THREE.Plane(new THREE.Vector3(0, 1, 0), -dragPos.y);
             raycaster.setFromCamera(mouse, camera);
-            const intersectPos = new THREE.Vector3();
-            raycaster.ray.intersectPlane(planeY, intersectPos);
+            raycaster.ray.intersectPlane(tempPlane, tempIntersect);
 
-            if (intersectPos) {
-                const targetPos = new THREE.Vector3(0, defaultPos.y, intersectPos.z);
-                const nextPos = dragPos.clone().lerp(targetPos, 0.3);
+            if (tempIntersect) {
+                // IMPORTANT: Convert world intersect point to parent's local space
+                // because InteractiveHand3D is now inside a [z = 3.5] PlayerUnit group.
+                if (groupRef.current && groupRef.current.parent) {
+                    groupRef.current.parent.worldToLocal(tempIntersect);
+                }
+
+                tempTarget.set(0, defaultPos.y, tempIntersect.z);
+                const nextPos = dragPos.clone().lerp(tempTarget, 0.3);
                 setDragPos(nextPos);
-
                 lastPos.current.copy(nextPos);
 
                 // AUTO TRIGGER FOLD 
@@ -129,6 +137,15 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold, de
 
             {cards.map((card: CardData, index: number) => {
                 const xOffset = (index - (cards.length - 1) / 2) * handSpacing;
+
+                // Deck is at [-1.5, 0.4, -1.0] World.
+                // This group is at [dragPos.x, dragPos.y, dragPos.z] local to PlayerUnit [0, 0, 3.5].
+                // World position of this group = [dragPos.x, dragPos.y, 3.5 + dragPos.z]
+                // Local offset from this group to deck = world_deck - world_group
+                const deckLocalZ = deckPosition ? deckPosition[2] - (3.5 + dragPos.z) : 0;
+                const deckLocalX = deckPosition ? deckPosition[0] - dragPos.x : 0;
+                const deckLocalY = deckPosition ? deckPosition[1] - dragPos.y : 0;
+
                 return (
                     <Card3D
                         key={card.id}
@@ -136,11 +153,7 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold, de
                         suit={card.suit}
                         isFaceDown={isDragging}
                         position={[xOffset, index * 0.01, 0]}
-                        initialPosition={deckPosition ? [
-                            deckPosition[0] - dragPos.x,
-                            deckPosition[1] - dragPos.y,
-                            deckPosition[2] - dragPos.z
-                        ] : undefined}
+                        initialPosition={[deckLocalX, deckLocalY, deckLocalZ]}
                         rotation={isDragging ? [-Math.PI / 2, 0, 0] : [-Math.PI / 2.8, 0, 0]}
                     />
                 );

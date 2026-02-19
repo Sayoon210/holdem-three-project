@@ -1,16 +1,13 @@
 'use client';
 
 import React, { Suspense, useMemo } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
 import { PerspectiveCamera, Environment, ContactShadows, OrbitControls, useGLTF } from '@react-three/drei';
 import { EffectComposer, Bloom, Noise, Vignette } from '@react-three/postprocessing';
 import { Physics, RigidBody } from '@react-three/rapier';
-import Card3D from '../Card/Card3D';
 import Table3D from '../Table/Table3D';
 import CommunityBoard3D from '../Table/CommunityBoard3D';
-import PlayerHand3D from '../Card/PlayerHand3D';
 import InteractiveHand3D from '../Card/InteractiveHand3D';
-import Chip3D from '../Chip/Chip3D';
 import InteractiveChip3D from '../Chip/InteractiveChip3D';
 import CardDeck3D from '../Card/CardDeck3D';
 import { CardData, Rank, Suit } from '@/types/card';
@@ -66,13 +63,39 @@ const Scene3D: React.FC = () => {
     const [playerRoundBet, setPlayerRoundBet] = React.useState(0);
     const [chipResetTrigger, setChipResetTrigger] = React.useState(0);
     const [chipConfirmTrigger, setChipConfirmTrigger] = React.useState(0);
+    const [isDebug, setIsDebug] = React.useState(false); // New Debug State
 
-    // Stable positions for chips to prevent teleporting on re-render
-    const stabilizedChips = React.useMemo(() => {
-        return chipPositions.map(stack => ({
-            ...stack,
-            spawnPos: [stack.pos[0], 4 + Math.random() * 2, stack.pos[2]] as [number, number, number]
-        }));
+    // Stable positions for chips
+    // 1. spawnPos: High Y (Vertical Drop) but neat X/Z
+    // 2. resetWorldPos: Neat stack for Physics reset
+    const chipData = React.useMemo(() => {
+        return chipPositions.flatMap((stack, groupIndex) => {
+            return Array.from({ length: 4 }).map((_, i) => {
+                // Neat Stack Position (Local to PlayerUnit)
+                const neatLocalX = stack.pos[0];
+                const neatLocalY = i * 0.08;
+                const neatLocalZ = stack.pos[2];
+
+                // Vertical Drop Spawn: Same X/Z, but Moderate Y (simulating hand drop)
+                const spawnY = neatLocalY + 1.5; // Drop from 1.5 units above
+
+                // World Position for Reset (PlayerUnit is at [0, 0, 3.5] parent, 2.2 offset x)
+                // PlayerUnit Group: [0, 0, 3.5]
+                // Tray Area Group: [2.2, 0, 0] inside PlayerUnit
+                // Total World X = 0 + 2.2 + neatLocalX
+                // Total World Y = 0 + 0 + neatLocalY
+                // Total World Z = 3.5 + 0 + neatLocalZ
+                const worldX = 2.2 + neatLocalX;
+                const worldY = 0.6 + neatLocalY; // +0.6 base height
+                const worldZ = 3.5 + neatLocalZ;
+
+                return {
+                    id: `${groupIndex}-${i}`,
+                    spawnPos: [neatLocalX, spawnY, neatLocalZ] as [number, number, number],
+                    resetWorldPos: [worldX, worldY, worldZ] as [number, number, number]
+                };
+            });
+        });
     }, []);
 
     const addLog = (msg: string) => {
@@ -144,159 +167,240 @@ const Scene3D: React.FC = () => {
 
     return (
         <div style={{ width: '100vw', height: '100vh', background: '#000', position: 'relative', overflow: 'hidden' }}>
-            <Canvas shadows dpr={[1, 2]}>
-                <PerspectiveCamera
-                    makeDefault
-                    position={[0, 6, 4]}
-                    fov={75}
-                />
+            <Canvas
+                shadows
+                dpr={[1, 2]}
+                camera={{ position: [0, 9, 6], fov: 75 }}
+            >
                 <OrbitControls
                     enableRotate={false}
                     enablePan={false}
                     enableZoom={true}
                     minDistance={2}
-                    maxDistance={15}
-                    target={[0, 0, 0]}
+                    maxDistance={30}
+                    target={[0, 0, -3]}
                 />
 
                 <color attach="background" args={['#050505']} />
-
-                {/* Moodier, softer ambient light */}
                 <ambientLight intensity={0.15} />
-
-                {/* Primary focal light - softer shadows with penumbra */}
-                <spotLight
-                    position={[0, 10, 0]}
-                    angle={0.4}
-                    penumbra={0.8} // Softer edges
-                    intensity={150} // Slightly dimmed
-                    castShadow
-                    shadow-mapSize={[2048, 2048]}
-                    shadow-bias={-0.0001}
-                />
-
-                {/* Subtle fill light */}
                 <pointLight position={[5, 5, 5]} intensity={20} color="#ffaa88" />
 
-
                 <Suspense fallback={null}>
-                    <Physics debug={false}>
-                        <Table3D />
-                        <CardDeck3D />
+                    <Environment preset="night" />
+                    <ContactShadows opacity={0.4} scale={15} blur={2.4} far={4.5} resolution={1024} color="#000000" />
 
-                        <InteractiveHand3D
-                            cards={dealtCards.slice(0, visibleHandCount)}
-                            deckPosition={DECK_POSITION}
-                            onFold={handleFold}
-                        />
-
-                        {/* Chip Tray (Visual Enclosure) - Enlarged for 20 chips */}
-                        <group position={[2.2, 0, 3.5]}>
-                            {/* Walls of the tray */}
-                            <RigidBody type="fixed" colliders="cuboid">
-                                {/* Floor of tray */}
-                                <mesh position={[0, -0.05, 0]}>
-                                    <boxGeometry args={[1.8, 0.1, 1.8]} />
-                                    <meshStandardMaterial color="#333" transparent opacity={0.3} />
-                                </mesh>
-                                {/* Left Wall */}
-                                <mesh position={[-0.9, 0.4, 0]}>
-                                    <boxGeometry args={[0.05, 0.8, 1.8]} />
-                                    <meshStandardMaterial color="#555" transparent opacity={0.2} />
-                                </mesh>
-                                {/* Right Wall */}
-                                <mesh position={[0.9, 0.4, 0]}>
-                                    <boxGeometry args={[0.05, 0.8, 1.8]} />
-                                    <meshStandardMaterial color="#555" transparent opacity={0.2} />
-                                </mesh>
-                                {/* Back Wall */}
-                                <mesh position={[0, 0.4, -0.9]}>
-                                    <boxGeometry args={[1.8, 0.8, 0.05]} />
-                                    <meshStandardMaterial color="#555" transparent opacity={0.2} />
-                                </mesh>
-                                {/* Front Wall */}
-                                <mesh position={[0, 0.4, 0.9]}>
-                                    <boxGeometry args={[1.8, 0.8, 0.05]} />
-                                    <meshStandardMaterial color="#555" transparent opacity={0.2} />
-                                </mesh>
-                            </RigidBody>
-
-                            {/* Interactive Chips in the tray area */}
-                            {stabilizedChips.map((stack, groupIndex) => (
-                                <group key={groupIndex} position={stack.spawnPos}>
-                                    {Array.from({ length: 4 }).map((_, i) => {
-                                        const relativeY = i * 0.08;
-                                        // RELATIVE to [2.2, 0, 3.5] -> must be ABSOLUTE for teleport
-                                        const worldX = 2.2 + stack.pos[0];
-                                        const worldY = 0.6 + relativeY; // Settled height for refund (no rain)
-                                        const worldZ = 3.5 + stack.pos[2];
-
-                                        return (
-                                            <InteractiveChip3D
-                                                key={`${groupIndex}-${i}`}
-                                                position={[0, relativeY, 0]}
-                                                initialWorldPos={[worldX, worldY, worldZ]}
-                                                onBet={handleBet}
-                                                resetTrigger={chipResetTrigger}
-                                                confirmTrigger={chipConfirmTrigger}
-                                            />
-                                        );
-                                    })}
-                                </group>
-                            ))}
+                    <Physics debug={isDebug}>
+                        {/* TABLE UNIT [z = -3] */}
+                        <group position={[0, 0, -3]}>
+                            <spotLight
+                                position={[0, 10, 0]}
+                                angle={0.4}
+                                penumbra={0.8}
+                                intensity={500}
+                                castShadow
+                                shadow-mapSize={[1024, 1024]}
+                                shadow-bias={-0.001}
+                            />
+                            <Table3D />
+                            <CardDeck3D position={[-1.5, 0.4, 2.0]} />
+                            <CommunityBoard3D
+                                cards={dealtCards.slice(2, 2 + visibleBoardCount)}
+                                deckPosition={DECK_POSITION}
+                            />
                         </group>
 
-                        <CommunityBoard3D
-                            cards={dealtCards.slice(2, 2 + visibleBoardCount)}
-                            deckPosition={DECK_POSITION}
-                        />
+                        {/* PLAYER UNIT [z = 3.5] */}
+                        <group position={[0, 0, 3.5]}>
+                            <InteractiveHand3D
+                                cards={dealtCards.slice(0, visibleHandCount)}
+                                deckPosition={DECK_POSITION}
+                                onFold={handleFold}
+                            />
+                            {/* Player Chip Tray Interaction Area */}
+                            <group position={[2.2, 0, 0]}>
+                                {chipData.map((data, idx) => (
+                                    <InteractiveChip3D
+                                        key={data.id}
+                                        index={idx} // Pass index for staggered drop
+                                        position={data.spawnPos} // Start high
+                                        initialWorldPos={data.resetWorldPos} // Reset to neat stack
+                                        onBet={handleBet}
+                                        resetTrigger={chipResetTrigger}
+                                        confirmTrigger={chipConfirmTrigger}
+                                    />
+                                ))}
+                            </group>
 
-                        {/* Betting Zone (Pot Area) - 3-sided invisible walls to contain chips */}
+                            {/* TRAY BOX BOUNDARY (Debug Visual) */}
+                            <group position={[2.2, 0, 0]}>
+                                <RigidBody type="fixed" colliders="cuboid" collisionGroups={0x00010007}>
+                                    {/* Bottom Floor */}
+                                    <mesh position={[0, -0.02, 0]}>
+                                        <boxGeometry args={[1.3, 0.05, 1.3]} />
+                                        <meshStandardMaterial color={isDebug ? "red" : "black"} transparent opacity={isDebug ? 0.3 : 0.0} />
+                                    </mesh>
+                                    {/* Walls */}
+                                    <mesh position={[-0.65, 0.2, 0]}>
+                                        <boxGeometry args={[0.05, 0.4, 1.3]} />
+                                        <meshStandardMaterial color={isDebug ? "red" : "white"} transparent opacity={isDebug ? 0.3 : 0.0} />
+                                    </mesh>
+                                    <mesh position={[0.65, 0.2, 0]}>
+                                        <boxGeometry args={[0.05, 0.4, 1.3]} />
+                                        <meshStandardMaterial color={isDebug ? "red" : "white"} transparent opacity={isDebug ? 0.3 : 0.0} />
+                                    </mesh>
+                                    <mesh position={[0, 0.2, 0.65]}>
+                                        <boxGeometry args={[1.25, 0.4, 0.05]} />
+                                        <meshStandardMaterial color={isDebug ? "red" : "white"} transparent opacity={isDebug ? 0.3 : 0.0} />
+                                    </mesh>
+                                    <mesh position={[0, 0.2, -0.65]}>
+                                        <boxGeometry args={[1.25, 0.4, 0.05]} />
+                                        <meshStandardMaterial color={isDebug ? "red" : "white"} transparent opacity={isDebug ? 0.3 : 0.0} />
+                                    </mesh>
+                                </RigidBody>
+                            </group>
+                        </group>
+
+                        {/* Pot Area Betting Zone */}
                         <RigidBody type="fixed" colliders="cuboid" collisionGroups={0x00010007}>
-                            {/* North Wall (Opposite to player) */}
                             <mesh position={[0, 0.2, -1.5]}>
                                 <boxGeometry args={[3.0, 0.6, 0.05]} />
-                                <meshStandardMaterial transparent opacity={0} />
+                                <meshStandardMaterial
+                                    color={isDebug ? "red" : "white"}
+                                    transparent
+                                    opacity={isDebug ? 0.3 : 0}
+                                />
                             </mesh>
-                            {/* West Wall */}
                             <mesh position={[-1.5, 0.2, 0]}>
                                 <boxGeometry args={[0.05, 0.6, 3.0]} />
-                                <meshStandardMaterial transparent opacity={0} />
+                                <meshStandardMaterial
+                                    color={isDebug ? "red" : "white"}
+                                    transparent
+                                    opacity={isDebug ? 0.3 : 0}
+                                />
                             </mesh>
-                            {/* East Wall */}
                             <mesh position={[1.5, 0.2, 0]}>
                                 <boxGeometry args={[0.05, 0.6, 3.0]} />
-                                <meshStandardMaterial transparent opacity={0} />
+                                <meshStandardMaterial
+                                    color={isDebug ? "red" : "white"}
+                                    transparent
+                                    opacity={isDebug ? 0.3 : 0}
+                                />
                             </mesh>
-                            {/* 남쪽은 플레이어 구역이므로 비워둠 (던질 수 있게) */}
+                        </RigidBody>
+
+                        {/* Global Physics Floor */}
+                        <RigidBody type="fixed" colliders="cuboid" friction={2.0} restitution={0.2} position={[0, -0.01, 0]} collisionGroups={0x00010007}>
+                            <mesh visible={isDebug}>
+                                <boxGeometry args={[20, 0.05, 20]} />
+                                <meshStandardMaterial color="red" transparent opacity={0.3} />
+                            </mesh>
                         </RigidBody>
                     </Physics>
                 </Suspense>
 
                 {/* Post-processing setup */}
                 <EffectComposer>
-                    <Bloom
-                        intensity={0.5}
-                        luminanceThreshold={0.8}
-                        mipmapBlur
-                        radius={0.6} // Wider, softer bloom
-                    />
+                    <Bloom intensity={0.5} luminanceThreshold={0.8} mipmapBlur radius={0.6} />
                     <Noise opacity={0.015} />
                     <Vignette eskil={false} offset={0.1} darkness={1.1} />
                 </EffectComposer>
             </Canvas>
 
-            {/* GAME ACTION UI */}
+            {/* GAME LOGS & DEBUG */}
             <div style={{
                 position: 'absolute',
-                bottom: '100px',
+                top: '40px',
+                left: '40px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                zIndex: 1000,
+            }}>
+                <button
+                    onClick={() => setIsDebug(!isDebug)}
+                    style={{
+                        background: isDebug ? '#ff4444' : 'rgba(0,0,0,0.5)',
+                        color: 'white',
+                        border: '1px solid #666',
+                        padding: '8px 12px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        alignSelf: 'flex-start',
+                        fontSize: '0.8rem'
+                    }}
+                >
+                    {isDebug ? 'DEBUG: ON' : 'DEBUG: OFF'}
+                </button>
+
+                <div style={{
+                    width: '320px',
+                    maxHeight: '240px',
+                    overflowY: 'auto',
+                    padding: '15px',
+                    background: 'rgba(0, 0, 0, 0.6)',
+                    backdropFilter: 'blur(10px)',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(212, 175, 55, 0.2)',
+                    color: '#fff',
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    zIndex: 1000,
+                    scrollbarWidth: 'none'
+                }}>
+                    {debugLogs.length === 0 ? (
+                        <div style={{ color: '#666', fontStyle: 'italic' }}>Waiting for action...</div>
+                    ) : (
+                        debugLogs.map((log, i) => (
+                            <div key={i} style={{
+                                borderLeft: '2px solid #D4AF37',
+                                paddingLeft: '10px',
+                                opacity: 0.7 + (i / debugLogs.length) * 0.3
+                            }}>
+                                {log}
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+
+            {/* UI LAYER */}
+            <div style={{
+                position: 'absolute',
+                bottom: '40px',
                 right: '40px',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'flex-end',
-                gap: '20px',
+                gap: '12px',
                 zIndex: 1000
             }}>
+                {(gameStage !== 'WAITING' && (potTotal > 0 || playerRoundBet > 0)) && (
+                    <div style={{
+                        background: 'rgba(0, 0, 0, 0.85)',
+                        padding: '12px 20px',
+                        borderRadius: '8px',
+                        border: '2px solid #D4AF37',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-end',
+                        gap: '4px',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.6)'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
+                            <span style={{ color: '#888', fontSize: '0.75rem', fontWeight: 'bold' }}>TOTAL POT</span>
+                            <span style={{ color: '#D4AF37', fontSize: '1.8rem', fontWeight: '900' }}>${potTotal.toLocaleString()}</span>
+                        </div>
+                        {playerRoundBet > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', borderTop: '1px solid #333', paddingTop: '4px', width: '100%', justifyContent: 'flex-end' }}>
+                                <span style={{ color: '#666', fontSize: '0.65rem', fontWeight: 'bold' }}>CURRENT BET</span>
+                                <span style={{ color: '#fff', fontSize: '1.2rem', fontWeight: '800' }}>${playerRoundBet.toLocaleString()}</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {gameStage === 'WAITING' ? (
                     <button
                         onClick={startDealing}
@@ -304,109 +408,49 @@ const Scene3D: React.FC = () => {
                             background: '#D4AF37',
                             color: '#000',
                             border: 'none',
-                            padding: '15px 60px',
+                            padding: '12px 35px',
                             borderRadius: '4px',
-                            fontSize: '1.5rem',
                             fontWeight: '900',
                             cursor: 'pointer',
+                            fontSize: '1rem',
+                            letterSpacing: '0.15em',
                             boxShadow: '0 0 20px rgba(212, 175, 55, 0.4)',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.2em'
+                            transition: 'all 0.2s ease',
+                            textTransform: 'uppercase'
                         }}
                     >
-                        Start Game
+                        START DEALING
                     </button>
                 ) : gameStage === 'PLAYING' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                        {/* Dynamic Betting Button */}
-                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px' }}>
+                        <div style={{ display: 'flex', gap: '10px' }}>
                             <button
-                                disabled={playerRoundBet < SIMULATED_MAX_BET}
                                 onClick={handleConfirmBet}
+                                disabled={playerRoundBet < SIMULATED_MAX_BET}
                                 style={{
-                                    background: playerRoundBet < SIMULATED_MAX_BET ? '#444' : '#D4AF37',
-                                    color: playerRoundBet < SIMULATED_MAX_BET ? '#888' : '#000',
-                                    border: 'none',
-                                    padding: '15px 80px',
+                                    background: playerRoundBet < SIMULATED_MAX_BET ? '#222' : '#D4AF37',
+                                    color: playerRoundBet < SIMULATED_MAX_BET ? '#444' : '#000',
+                                    border: playerRoundBet < SIMULATED_MAX_BET ? '1px solid #333' : 'none',
+                                    padding: '12px 40px',
                                     borderRadius: '4px',
-                                    fontSize: '1.8rem',
+                                    fontSize: '1.1rem',
                                     fontWeight: '900',
                                     cursor: playerRoundBet < SIMULATED_MAX_BET ? 'not-allowed' : 'pointer',
-                                    boxShadow: playerRoundBet < SIMULATED_MAX_BET ? 'none' : '0 0 20px rgba(212, 175, 55, 0.4)',
+                                    transition: 'all 0.3s ease',
                                     textTransform: 'uppercase',
-                                    letterSpacing: '0.1em',
-                                    transition: 'all 0.2s ease'
+                                    letterSpacing: '0.1em'
                                 }}
                             >
-                                {playerRoundBet > SIMULATED_MAX_BET ? 'Raise' : 'Check'}
+                                {playerRoundBet >= SIMULATED_MAX_BET ? 'RAISE / CALL' : 'CHECK'}
                             </button>
                         </div>
-
-                        {/* Helper hint for matching bet */}
                         {playerRoundBet < SIMULATED_MAX_BET && (
-                            <div style={{ color: '#D4AF37', fontSize: '0.9rem', fontWeight: 'bold', textShadow: '0 0 5px #000' }}>
-                                Match ${SIMULATED_MAX_BET - playerRoundBet} to Check
+                            <div style={{ color: '#D4AF37', fontSize: '0.8rem', fontWeight: 'bold', textShadow: '0 0 5px #000' }}>
+                                NEED ${SIMULATED_MAX_BET - playerRoundBet} MORE TO CALL
                             </div>
                         )}
                     </div>
                 )}
-            </div>
-
-            {/* Debug UI Overlay */}
-            <div style={{
-                position: 'absolute',
-                top: '20px',
-                left: '20px',
-                width: '300px',
-                maxHeight: '80vh',
-                background: 'rgba(0, 0, 0, 0.7)',
-                color: '#00ff00',
-                fontFamily: 'monospace',
-                fontSize: '0.85rem',
-                padding: '15px',
-                borderRadius: '8px',
-                overflowY: 'auto',
-                pointerEvents: 'auto',
-                zIndex: 2000,
-                borderLeft: '4px solid #00ff00',
-                boxShadow: '0 0 15px rgba(0, 0, 0, 0.5)'
-            }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '10px', color: '#fff', borderBottom: '1px solid #444', paddingBottom: '5px' }}>
-                    DEBUG ENGINE LOGS
-                </div>
-                {debugLogs.length === 0 && <div style={{ opacity: 0.5 }}>Waiting for game start...</div>}
-                {debugLogs.map((log, i) => (
-                    <div key={i} style={{ marginBottom: '4px', wordBreak: 'break-all' }}>
-                        {log}
-                    </div>
-                ))}
-            </div>
-
-            {/* POT Counter UI Overlay - Enhanced Visibility */}
-            <div style={{
-                position: 'absolute',
-                top: '60px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                background: 'rgba(0, 0, 0, 0.85)',
-                padding: '15px 50px',
-                borderRadius: '12px',
-                border: '3px solid #D4AF37',
-                color: '#D4AF37',
-                fontSize: '2.5rem',
-                fontWeight: '900',
-                fontFamily: '"Outfit", "Inter", sans-serif',
-                pointerEvents: 'none',
-                textShadow: '0 0 15px rgba(212, 175, 55, 0.8)',
-                boxShadow: '0 0 30px rgba(0, 0, 0, 0.7), inset 0 0 10px rgba(212, 175, 55, 0.2)',
-                zIndex: 1000,
-                letterSpacing: '0.1em',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '15px'
-            }}>
-                <span style={{ fontSize: '1.2rem', opacity: 0.7 }}>TOTAL POT</span>
-                <span>${potTotal.toLocaleString()}</span>
             </div>
         </div>
     );

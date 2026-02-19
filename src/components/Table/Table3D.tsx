@@ -29,28 +29,14 @@ const Table3D: React.FC = () => {
                 <primitive
                     object={scene}
                     scale={0.12}
-                    position={[0, 0, -3]}
+                    position={[0, 0, 0]}
                 />
             </RigidBody>
 
             {/* Community Card Slots Area */}
-            <group position={[0, 0.01, -3]}>
+            <group position={[0, 0.01, 0]}>
                 <CommunityCardSlots />
             </group>
-
-            {/* 
-                Large stable physics floor for cards and chips.
-                Physics-only collider (no visual mesh) to avoid Z-fighting or shadow artifacts.
-            */}
-            <RigidBody type="fixed" colliders="cuboid" friction={2.0} restitution={0.2} position={[0, -0.01, 0]} collisionGroups={0x00010007}>
-                {/* 
-                    Collider-only mesh: visible={false} and no material properties 
-                    ensures it only exists in the physics world.
-                */}
-                <mesh visible={false}>
-                    <cylinderGeometry args={[5.2, 5.2, 0.01, 32]} />
-                </mesh>
-            </RigidBody>
         </group>
     );
 };

@@ -11,9 +11,15 @@ interface CommunityBoard3DProps {
 
 const CommunityBoard3D: React.FC<CommunityBoard3DProps> = ({ cards, deckPosition }) => {
     const slotSpacing = 1.1;
-    const boardZ = -3;
+    const boardZ = 0;
     const boardY = 0.2; // Tilted elevation
 
+    // Board is anchored to Parent [z = -3]. 
+    // Deck is at [-1.5, 0.4, -1.0] World.
+    // Local start position = world_deck - world_board
+    const localStartPos: [number, number, number] = deckPosition
+        ? [deckPosition[0], deckPosition[1] - boardY, deckPosition[2] - (-3)]
+        : [0, 1, 0];
     return (
         <group>
             {cards.map((card, index) => (
@@ -23,7 +29,7 @@ const CommunityBoard3D: React.FC<CommunityBoard3DProps> = ({ cards, deckPosition
                     suit={card.suit}
                     isFaceDown={card.isFaceDown}
                     position={[(index - 2) * slotSpacing, boardY, boardZ]}
-                    initialPosition={deckPosition}
+                    initialPosition={localStartPos}
                     rotation={[-Math.PI / 2.8, 0, 0]}
                 />
             ))}
