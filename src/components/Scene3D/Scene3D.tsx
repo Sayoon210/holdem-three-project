@@ -1,29 +1,26 @@
 'use client';
 
 import React, { Suspense, useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { PerspectiveCamera, Environment, ContactShadows, OrbitControls, useGLTF } from '@react-three/drei';
 import { EffectComposer, Bloom, Noise, Vignette } from '@react-three/postprocessing';
 import { Physics, RigidBody } from '@react-three/rapier';
+import * as THREE from 'three';
 import Table3D from '../Table/Table3D';
 import CommunityBoard3D from '../Table/CommunityBoard3D';
 import InteractiveHand3D from '../Card/InteractiveHand3D';
 import InteractiveChip3D from '../Chip/InteractiveChip3D';
 import CardDeck3D from '../Card/CardDeck3D';
+import PlayerSeat3D from '../Player/PlayerSeat3D';
+import { usePokerSocket } from '../../hooks/usePokerSocket';
 import { CardData, Rank, Suit } from '@/types/card';
 
 const DECK_POSITION: [number, number, number] = [-1.5, 0.4, -1.0];
 const SIMULATED_MAX_BET = 300; // Expected bet to match
 
-// Tray layout positions for chips
-const chipPositions = [
-    { pos: [-0.4, 0, -0.4] as [number, number, number] },
-    { pos: [0.4, 0, -0.4] as [number, number, number] },
-    { pos: [-0.4, 0, 0.4] as [number, number, number] },
-    { pos: [0.4, 0, 0.4] as [number, number, number] },
-    { pos: [0, 0, 0] as [number, number, number] },
-];
+// Table constants moved to component definitions
 
+// Physical Tray Box boundary for betting trigger
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] as Rank[];
 const SUITS = ['S', 'H', 'D', 'C'] as Suit[];
 
@@ -55,48 +52,58 @@ const Scene3D: React.FC = () => {
     const [visibleBoardCount, setVisibleBoardCount] = React.useState(0);
 
     // Deck & Debug State
-    const [deck, setDeck] = React.useState<CardData[]>([]);
-    const [dealtCards, setDealtCards] = React.useState<CardData[]>([]);
+    const [communityCards, setCommunityCards] = React.useState<CardData[]>([]);
+    const [playersHoleCards, setPlayersHoleCards] = React.useState<Record<number, CardData[]>>({});
     const [debugLogs, setDebugLogs] = React.useState<string[]>([]);
 
     // Betting Flow State
     const [playerRoundBet, setPlayerRoundBet] = React.useState(0);
     const [chipResetTrigger, setChipResetTrigger] = React.useState(0);
     const [chipConfirmTrigger, setChipConfirmTrigger] = React.useState(0);
-    const [isDebug, setIsDebug] = React.useState(false); // New Debug State
+    const [remoteBetTriggers, setRemoteBetTriggers] = React.useState([0, 0]); // Index 0 for Player 0, Index 1 for Player 1
+    const [isDebug, setIsDebug] = React.useState(false);
 
-    // Stable positions for chips
-    // 1. spawnPos: High Y (Vertical Drop) but neat X/Z
-    // 2. resetWorldPos: Neat stack for Physics reset
-    const chipData = React.useMemo(() => {
-        return chipPositions.flatMap((stack, groupIndex) => {
-            return Array.from({ length: 4 }).map((_, i) => {
-                // Neat Stack Position (Local to PlayerUnit)
-                const neatLocalX = stack.pos[0];
-                const neatLocalY = i * 0.08;
-                const neatLocalZ = stack.pos[2];
-
-                // Vertical Drop Spawn: Same X/Z, but Moderate Y (simulating hand drop)
-                const spawnY = neatLocalY + 1.5; // Drop from 1.5 units above
-
-                // World Position for Reset (PlayerUnit is at [0, 0, 3.5] parent, 2.2 offset x)
-                // PlayerUnit Group: [0, 0, 3.5]
-                // Tray Area Group: [2.2, 0, 0] inside PlayerUnit
-                // Total World X = 0 + 2.2 + neatLocalX
-                // Total World Y = 0 + 0 + neatLocalY
-                // Total World Z = 3.5 + 0 + neatLocalZ
-                const worldX = 2.2 + neatLocalX;
-                const worldY = 0.6 + neatLocalY; // +0.6 base height
-                const worldZ = 3.5 + neatLocalZ;
-
-                return {
-                    id: `${groupIndex}-${i}`,
-                    spawnPos: [neatLocalX, spawnY, neatLocalZ] as [number, number, number],
-                    resetWorldPos: [worldX, worldY, worldZ] as [number, number, number]
-                };
+    const handleRemoteAction = React.useCallback((data: any) => {
+        if (data.type === 'bet') {
+            setRemoteBetTriggers(prev => {
+                const next = [...prev];
+                next[data.seat] += 1;
+                return next;
             });
-        });
+            addLog(`Remote player (Seat ${data.seat}) bet!`);
+        } else if (data.type === 'fold') {
+            addLog(`Remote player (Seat ${data.seat}) folded.`);
+        } else if (data.type === 'stage_change') {
+            setGameStage(data.stage);
+            addLog(`Game Stage: ${data.stage}`);
+            if (data.stage === 'DEALING') {
+                setCommunityCards([]);
+                setPlayersHoleCards({});
+                setVisibleBoardCount(0);
+                setIsFolded(false);
+                setPotTotal(0);
+                setPlayerRoundBet(0);
+            }
+        } else if (data.type === 'deal_private') {
+            setPlayersHoleCards(prev => ({ ...prev, [data.seat]: data.cards }));
+            addLog(`Received Hole Cards for Seat ${data.seat}`);
+            setVisibleHandCount(2); // In this MVP, they appear instantly after deal
+        } else if (data.type === 'deal_public') {
+            setCommunityCards(data.cards);
+        } else if (data.type === 'update_board_count') {
+            setVisibleBoardCount(data.visibleBoardCount);
+        }
     }, []);
+
+    const { isConnected, yourSeat, sendAction, startGame } = usePokerSocket(handleRemoteAction);
+    const tableRef = React.useRef<THREE.Group>(null);
+
+    // Multi-player State
+    const [activePlayerId, setActivePlayerId] = React.useState(0);
+    const [players, setPlayers] = React.useState([
+        { id: 0, name: 'Player 1', cards: [], roundBet: 0 },
+        { id: 1, name: 'Player 2', cards: [], roundBet: 0 },
+    ]);
 
     const addLog = (msg: string) => {
         setDebugLogs(prev => [...prev.slice(-100), `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -123,46 +130,10 @@ const Scene3D: React.FC = () => {
         setIsFolded(true);
     };
 
-    const startDealing = async () => {
+    const startDealing = () => {
         if (gameStage !== 'WAITING') return;
-
-        // 1. Prepare Deck
-        const newDeck = shuffleDeck(generateDeck());
-        setDeck(newDeck);
-        setDealtCards([]);
-        setDebugLogs([]);
-        setIsFolded(false);
-        setPlayerRoundBet(0);
-        setPotTotal(0);
-        addLog("--- GAME START ---");
-        addLog(`Shuffled Deck: ${newDeck.map(c => `${c.rank}${c.suit}`).join(', ').substring(0, 50)}...`);
-
-        setGameStage('DEALING');
-
-        // 2. Deal 2 hole cards
-        const hand = newDeck.slice(0, 2);
-        setDealtCards(prev => [...prev, ...hand]);
-        for (let i = 1; i <= 2; i++) {
-            await new Promise(r => setTimeout(r, 600));
-            setVisibleHandCount(i);
-            addLog(`DEAL Hole ${i}: ${hand[i - 1].rank}-${hand[i - 1].suit}`);
-        }
-
-        // Delay before flop
-        await new Promise(r => setTimeout(r, 800));
-
-        // 3. Deal Community cards (seq)
-        const board = newDeck.slice(2, 7);
-        setDealtCards(prev => [...prev, ...board]);
-        for (let i = 1; i <= 5; i++) {
-            await new Promise(r => setTimeout(r, 500));
-            setVisibleBoardCount(i);
-            const stageName = i <= 3 ? `Flop ${i}` : (i === 4 ? 'Turn' : 'River');
-            addLog(`DEAL ${stageName}: ${board[i - 1].rank}-${board[i - 1].suit}`);
-        }
-
-        addLog("--- BETTING ROUND START ---");
-        setGameStage('PLAYING');
+        startGame();
+        addLog("Requesting Game Start from Server...");
     };
 
     return (
@@ -179,7 +150,11 @@ const Scene3D: React.FC = () => {
                     minDistance={2}
                     maxDistance={30}
                     target={[0, 0, -3]}
+                    makeDefault
                 />
+
+                {/* DYNAMIC CAMERA CONTROLLER */}
+                <CameraController activePlayerId={activePlayerId} tableRef={tableRef} />
 
                 <color attach="background" args={['#050505']} />
                 <ambientLight intensity={0.15} />
@@ -201,64 +176,57 @@ const Scene3D: React.FC = () => {
                                 shadow-mapSize={[1024, 1024]}
                                 shadow-bias={-0.001}
                             />
-                            <Table3D />
-                            <CardDeck3D position={[-1.5, 0.4, 2.0]} />
+                            <Table3D ref={tableRef} />
+                            <CardDeck3D position={[-1.5, 0.4, 1.0]} />
                             <CommunityBoard3D
-                                cards={dealtCards.slice(2, 2 + visibleBoardCount)}
+                                cards={communityCards.slice(0, visibleBoardCount)}
                                 deckPosition={DECK_POSITION}
                             />
                         </group>
 
-                        {/* PLAYER UNIT [z = 3.5] */}
-                        <group position={[0, 0, 3.5]}>
-                            <InteractiveHand3D
-                                cards={dealtCards.slice(0, visibleHandCount)}
-                                deckPosition={DECK_POSITION}
-                                onFold={handleFold}
-                            />
-                            {/* Player Chip Tray Interaction Area */}
-                            <group position={[2.2, 0, 0]}>
-                                {chipData.map((data, idx) => (
-                                    <InteractiveChip3D
-                                        key={data.id}
-                                        index={idx} // Pass index for staggered drop
-                                        position={data.spawnPos} // Start high
-                                        initialWorldPos={data.resetWorldPos} // Reset to neat stack
-                                        onBet={handleBet}
-                                        resetTrigger={chipResetTrigger}
-                                        confirmTrigger={chipConfirmTrigger}
-                                    />
-                                ))}
-                            </group>
+                        {/* SEAT 0: South [z = 3.5] */}
+                        <PlayerSeat3D
+                            position={[0, 0, 3.5]}
+                            rotation={[0, 0, 0]}
+                            cards={playersHoleCards[0] || []}
+                            isTurn={activePlayerId === 0}
+                            onBet={() => {
+                                handleBet();
+                                sendAction({ type: 'bet', seat: 0 });
+                            }}
+                            onFold={() => {
+                                handleFold();
+                                sendAction({ type: 'fold', seat: 0 });
+                            }}
+                            resetTrigger={chipResetTrigger}
+                            confirmTrigger={chipConfirmTrigger}
+                            remoteBetTrigger={remoteBetTriggers[0]}
+                            isDebug={isDebug}
+                            deckPosition={DECK_POSITION}
+                            enabled={yourSeat === 0 && activePlayerId === 0}
+                        />
 
-                            {/* TRAY BOX BOUNDARY (Debug Visual) */}
-                            <group position={[2.2, 0, 0]}>
-                                <RigidBody type="fixed" colliders="cuboid" collisionGroups={0x00010007}>
-                                    {/* Bottom Floor */}
-                                    <mesh position={[0, -0.02, 0]}>
-                                        <boxGeometry args={[1.3, 0.05, 1.3]} />
-                                        <meshStandardMaterial color={isDebug ? "red" : "black"} transparent opacity={isDebug ? 0.3 : 0.0} />
-                                    </mesh>
-                                    {/* Walls */}
-                                    <mesh position={[-0.65, 0.2, 0]}>
-                                        <boxGeometry args={[0.05, 0.4, 1.3]} />
-                                        <meshStandardMaterial color={isDebug ? "red" : "white"} transparent opacity={isDebug ? 0.3 : 0.0} />
-                                    </mesh>
-                                    <mesh position={[0.65, 0.2, 0]}>
-                                        <boxGeometry args={[0.05, 0.4, 1.3]} />
-                                        <meshStandardMaterial color={isDebug ? "red" : "white"} transparent opacity={isDebug ? 0.3 : 0.0} />
-                                    </mesh>
-                                    <mesh position={[0, 0.2, 0.65]}>
-                                        <boxGeometry args={[1.25, 0.4, 0.05]} />
-                                        <meshStandardMaterial color={isDebug ? "red" : "white"} transparent opacity={isDebug ? 0.3 : 0.0} />
-                                    </mesh>
-                                    <mesh position={[0, 0.2, -0.65]}>
-                                        <boxGeometry args={[1.25, 0.4, 0.05]} />
-                                        <meshStandardMaterial color={isDebug ? "red" : "white"} transparent opacity={isDebug ? 0.3 : 0.0} />
-                                    </mesh>
-                                </RigidBody>
-                            </group>
-                        </group>
+                        {/* SEAT 1: North [z = -9.5] */}
+                        <PlayerSeat3D
+                            position={[0, 0, -9.5]}
+                            rotation={[0, Math.PI, 0]}
+                            cards={playersHoleCards[1] || []}
+                            isTurn={activePlayerId === 1}
+                            onBet={() => {
+                                handleBet();
+                                sendAction({ type: 'bet', seat: 1 });
+                            }}
+                            onFold={() => {
+                                handleFold();
+                                sendAction({ type: 'fold', seat: 1 });
+                            }}
+                            resetTrigger={chipResetTrigger}
+                            confirmTrigger={chipConfirmTrigger}
+                            remoteBetTrigger={remoteBetTriggers[1]}
+                            isDebug={isDebug}
+                            deckPosition={DECK_POSITION}
+                            enabled={yourSeat === 1 && activePlayerId === 1}
+                        />
 
                         {/* Pot Area Betting Zone */}
                         <RigidBody type="fixed" colliders="cuboid" collisionGroups={0x00010007}>
@@ -402,47 +370,62 @@ const Scene3D: React.FC = () => {
                 )}
 
                 {gameStage === 'WAITING' ? (
-                    <button
-                        onClick={startDealing}
-                        style={{
-                            background: '#D4AF37',
-                            color: '#000',
-                            border: 'none',
-                            padding: '12px 35px',
-                            borderRadius: '4px',
-                            fontWeight: '900',
-                            cursor: 'pointer',
-                            fontSize: '1rem',
-                            letterSpacing: '0.15em',
-                            boxShadow: '0 0 20px rgba(212, 175, 55, 0.4)',
-                            transition: 'all 0.2s ease',
-                            textTransform: 'uppercase'
-                        }}
-                    >
-                        START DEALING
-                    </button>
-                ) : gameStage === 'PLAYING' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px' }}>
-                        <div style={{ display: 'flex', gap: '10px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ color: '#D4AF37', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                            {yourSeat === null ? 'CONNECTING...' : `YOUR SEAT: ${yourSeat === 0 ? 'SOUTH' : 'NORTH'}`}
+                        </div>
+                        {yourSeat === 0 && (
                             <button
-                                onClick={handleConfirmBet}
-                                disabled={playerRoundBet < SIMULATED_MAX_BET}
+                                onClick={startDealing}
                                 style={{
-                                    background: playerRoundBet < SIMULATED_MAX_BET ? '#222' : '#D4AF37',
-                                    color: playerRoundBet < SIMULATED_MAX_BET ? '#444' : '#000',
-                                    border: playerRoundBet < SIMULATED_MAX_BET ? '1px solid #333' : 'none',
-                                    padding: '12px 40px',
+                                    background: '#D4AF37',
+                                    color: '#000',
+                                    border: 'none',
+                                    padding: '12px 35px',
                                     borderRadius: '4px',
-                                    fontSize: '1.1rem',
                                     fontWeight: '900',
-                                    cursor: playerRoundBet < SIMULATED_MAX_BET ? 'not-allowed' : 'pointer',
-                                    transition: 'all 0.3s ease',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.1em'
+                                    cursor: 'pointer',
+                                    fontSize: '1rem',
+                                    letterSpacing: '0.15em',
+                                    boxShadow: '0 0 20px rgba(212, 175, 55, 0.4)',
+                                    transition: 'all 0.2s ease',
+                                    textTransform: 'uppercase'
                                 }}
                             >
-                                {playerRoundBet >= SIMULATED_MAX_BET ? 'RAISE / CALL' : 'CHECK'}
+                                START DEALING
                             </button>
+                        )}
+                        {yourSeat !== 0 && (
+                            <div style={{ color: '#666', fontSize: '0.8rem' }}>Waiting for Seat 0 to start...</div>
+                        )}
+                    </div>
+                ) : gameStage === 'PLAYING' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px' }}>
+                        <div style={{ color: '#D4AF37', fontSize: '1rem', fontWeight: 'bold' }}>
+                            {activePlayerId === yourSeat ? 'YOUR TURN' : `WAITING FOR PLAYER ${activePlayerId + 1}`}
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            {activePlayerId === yourSeat && (
+                                <button
+                                    onClick={handleConfirmBet}
+                                    disabled={playerRoundBet < SIMULATED_MAX_BET}
+                                    style={{
+                                        background: playerRoundBet < SIMULATED_MAX_BET ? '#222' : '#D4AF37',
+                                        color: playerRoundBet < SIMULATED_MAX_BET ? '#444' : '#000',
+                                        border: playerRoundBet < SIMULATED_MAX_BET ? '1px solid #333' : 'none',
+                                        padding: '12px 40px',
+                                        borderRadius: '4px',
+                                        fontSize: '1.1rem',
+                                        fontWeight: '900',
+                                        cursor: playerRoundBet < SIMULATED_MAX_BET ? 'not-allowed' : 'pointer',
+                                        transition: 'all 0.3s ease',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.1em'
+                                    }}
+                                >
+                                    {playerRoundBet >= SIMULATED_MAX_BET ? 'RAISE / CALL' : 'CHECK'}
+                                </button>
+                            )}
                         </div>
                         {playerRoundBet < SIMULATED_MAX_BET && (
                             <div style={{ color: '#D4AF37', fontSize: '0.8rem', fontWeight: 'bold', textShadow: '0 0 5px #000' }}>
@@ -454,6 +437,30 @@ const Scene3D: React.FC = () => {
             </div>
         </div>
     );
+};
+
+// Camera Transition Helper
+const CameraController: React.FC<{ activePlayerId: number; tableRef: React.RefObject<THREE.Group | null> }> = ({ activePlayerId, tableRef }) => {
+    const { camera } = useThree();
+
+    useFrame((state, delta) => {
+        // Target camera positions
+        const seat0Pos = new THREE.Vector3(0, 9, 6);
+        const seat1Pos = new THREE.Vector3(0, 9, -12);
+
+        const targetPos = activePlayerId === 0 ? seat0Pos : seat1Pos;
+        camera.position.lerp(targetPos, 0.05);
+
+        if (tableRef.current) {
+            const tableWorldPos = new THREE.Vector3();
+            tableRef.current.getWorldPosition(tableWorldPos);
+            camera.lookAt(tableWorldPos);
+        } else {
+            camera.lookAt(0, 0, -3); // Fallback
+        }
+    });
+
+    return null;
 };
 
 // Pre-load assets

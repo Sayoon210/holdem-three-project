@@ -1,9 +1,10 @@
 import React from 'react';
 import { RigidBody } from '@react-three/rapier';
 import { useGLTF } from '@react-three/drei';
+import * as THREE from 'three';
 import CommunityCardSlots from './CommunityCardSlots';
 
-const Table3D: React.FC = () => {
+const Table3D = React.forwardRef<THREE.Group>((props, ref) => {
     // Load the model added by user
     const { scene } = useGLTF('/models/pokertable_round/scene.gltf');
 
@@ -24,7 +25,7 @@ const Table3D: React.FC = () => {
     }, [scene]);
 
     return (
-        <group>
+        <group ref={ref}>
             <RigidBody type="fixed" colliders="trimesh" collisionGroups={0x00010007}>
                 <primitive
                     object={scene}
@@ -39,9 +40,12 @@ const Table3D: React.FC = () => {
             </group>
         </group>
     );
-};
+});
+
+Table3D.displayName = 'Table3D';
 
 // Pre-load the asset
 useGLTF.preload('/models/pokertable_round/scene.gltf');
 
+Table3D.displayName = 'Table3D';
 export default Table3D;

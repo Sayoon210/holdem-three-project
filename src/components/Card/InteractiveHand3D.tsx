@@ -15,9 +15,17 @@ interface InteractiveHand3DProps {
     cards: CardData[];
     onFold?: () => void;
     deckPosition?: [number, number, number];
+    enabled?: boolean;
+    rotation?: [number, number, number];
 }
 
-const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold, deckPosition }) => {
+const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({
+    cards,
+    onFold,
+    deckPosition,
+    enabled = true,
+    rotation = [0, 0, 0]
+}) => {
     const { camera, raycaster, mouse } = useThree();
     const [isDragging, setIsDragging] = useState(false);
     const [dragPos, setDragPos] = useState(new THREE.Vector3(0, 0.7, -0.5));
@@ -72,15 +80,22 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold, de
         if (isFolded && !impulseApplied.current) {
             const refs = thrownCardsRef.current;
             if (refs.length === cards.length && refs.every(r => !!r)) {
+                // Determine world direction for "Forward" using the seat rotation prop
+                // This works even if groupRef.current is null (unmounted)
+                const worldQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(...rotation));
+
+                const localImpulse = new THREE.Vector3(0, FOLD_IMPULSE_Y, FOLD_IMPULSE_Z);
+                localImpulse.applyQuaternion(worldQuaternion);
+
                 refs.forEach((ref) => {
                     ref.applyImpulse({
-                        x: (Math.random() - 0.5) * 0.05, // Slightly more scatter
-                        y: FOLD_IMPULSE_Y,
-                        z: FOLD_IMPULSE_Z
+                        x: localImpulse.x + (Math.random() - 0.5) * 0.05,
+                        y: localImpulse.y,
+                        z: localImpulse.z
                     }, true);
                     ref.applyTorqueImpulse({
                         x: -0.002,
-                        y: (Math.random() - 0.5) * 0.05, // Added Y-axis spin for scattering
+                        y: (Math.random() - 0.5) * 0.05,
                         z: (Math.random() - 0.5) * 0.01
                     }, true);
                 });
@@ -90,6 +105,7 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold, de
     });
 
     const handlePointerDown = (e: any) => {
+        if (!enabled || isFolded) return;
         e.stopPropagation();
         // Prevent default browser behavior to avoid flickering related to drag-and-drop
         if (e.pointerType === 'mouse') e.target.releasePointerCapture(e.pointerId);
@@ -101,72 +117,65 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({ cards, onFold, de
         setIsDragging(false);
     };
 
-    if (isFolded) {
-        return (
-            <group>
-                {cards.map((card: CardData, index: number) => (
-                    <RigidBody
-                        key={card.id}
-                        ref={(el) => { thrownCardsRef.current[index] = el; }}
-                        position={[index * 0.1, dragPos.y + 0.1, dragPos.z]}
-                        rotation={[Math.PI / 2, 0, 0]} // Fixed: Flip face-down (Back up)
-                        colliders="cuboid"
-                        restitution={0.3}
-                        friction={4.0} // Increased for a more controlled slide
-                        linearDamping={4.0} // Stop faster
-                        angularDamping={0.5}
-                        collisionGroups={0x00040005}
-                    >
-                        <Card3D
-                            rank={card.rank}
-                            suit={card.suit}
-                            isFolded={true}
-                            animateEnabled={false}
-                        />
-                    </RigidBody>
-                ))}
-            </group>
-        );
-    }
-
     return (
-        <group
-            ref={groupRef}
-            position={[dragPos.x, dragPos.y, dragPos.z]}
-        >
+        <group ref={groupRef} position={[dragPos.x, dragPos.y, dragPos.z]}>
+            {!isFolded ? (
+                <>
+                    {cards.map((card: CardData, index: number) => {
+                        const xOffset = (index - (cards.length - 1) / 2) * handSpacing;
 
-            {cards.map((card: CardData, index: number) => {
-                const xOffset = (index - (cards.length - 1) / 2) * handSpacing;
+                        // Calculate deck position local to this hand group
+                        const deckLocal = new THREE.Vector3(...(deckPosition || [0, 0, 0]));
+                        if (groupRef.current) {
+                            groupRef.current.worldToLocal(deckLocal);
+                        }
 
-                // Deck is at [-1.5, 0.4, -1.0] World.
-                // This group is at [dragPos.x, dragPos.y, dragPos.z] local to PlayerUnit [0, 0, 3.5].
-                // World position of this group = [dragPos.x, dragPos.y, 3.5 + dragPos.z]
-                // Local offset from this group to deck = world_deck - world_group
-                const deckLocalZ = deckPosition ? deckPosition[2] - (3.5 + dragPos.z) : 0;
-                const deckLocalX = deckPosition ? deckPosition[0] - dragPos.x : 0;
-                const deckLocalY = deckPosition ? deckPosition[1] - dragPos.y : 0;
-
-                return (
-                    <Card3D
-                        key={card.id}
-                        rank={card.rank}
-                        suit={card.suit}
-                        isFaceDown={isDragging}
-                        position={[xOffset, index * 0.01, 0]}
-                        initialPosition={[deckLocalX, deckLocalY, deckLocalZ]}
-                        rotation={isDragging ? [-Math.PI / 2, 0, 0] : [-Math.PI / 2.8, 0, 0]}
-                    />
-                );
-            })}
-
-            {/* Invisible grab area - Very tight and only listener source */}
-            <mesh
-                visible={false}
-                onPointerDown={handlePointerDown}
-                onPointerUp={handlePointerUp}
-            >
-                <boxGeometry args={[1.5, 0.8, 0.2]} />
-            </mesh>
+                        return (
+                            <Card3D
+                                key={card.id}
+                                rank={card.rank}
+                                suit={card.suit}
+                                isFaceDown={isDragging}
+                                position={[xOffset, index * 0.01, 0]}
+                                initialPosition={[deckLocal.x, deckLocal.y, deckLocal.z]}
+                                rotation={isDragging ? [-Math.PI / 2, 0, 0] : [-Math.PI / 2.8, 0, 0]}
+                            />
+                        );
+                    })}
+                    {/* Invisible grab area */}
+                    <mesh
+                        visible={false}
+                        onPointerDown={handlePointerDown}
+                        onPointerUp={handlePointerUp}
+                    >
+                        <boxGeometry args={[2.0, 1.2, 0.5]} />
+                    </mesh>
+                </>
+            ) : (
+                <group>
+                    {cards.map((card: CardData, index: number) => (
+                        <RigidBody
+                            key={card.id}
+                            ref={(el) => { thrownCardsRef.current[index] = el; }}
+                            position={[index * 0.1, 0.1, 0]} // Relative to groupRef which is at dragPos
+                            rotation={[Math.PI / 2, 0, 0]}
+                            colliders="cuboid"
+                            restitution={0.3}
+                            friction={4.0}
+                            linearDamping={4.0}
+                            angularDamping={0.5}
+                            collisionGroups={0x00040005}
+                        >
+                            <Card3D
+                                rank={card.rank}
+                                suit={card.suit}
+                                isFolded={true}
+                                animateEnabled={false}
+                            />
+                        </RigidBody>
+                    ))}
+                </group>
+            )}
         </group>
     );
 };

@@ -30,7 +30,7 @@ const CommunityBoard3D: React.FC<CommunityBoard3DProps> = ({ cards, deckPosition
                     isFaceDown={card.isFaceDown}
                     position={[(index - 2) * slotSpacing, boardY, boardZ]}
                     initialPosition={localStartPos}
-                    rotation={[-Math.PI / 2.8, 0, 0]}
+                    rotation={[-Math.PI / 2, 0, 0]}
                 />
             ))}
         </group>
