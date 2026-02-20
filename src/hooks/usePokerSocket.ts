@@ -89,11 +89,17 @@ export const usePokerSocket = (onRemoteAction: (action: any) => void) => {
         }
     };
 
+    const sendLog = (message: string) => {
+        if (socketRef.current) {
+            socketRef.current.emit('client_log', { message });
+        }
+    };
+
     const startGame = () => {
         if (socketRef.current) {
             socketRef.current.emit('start_game');
         }
     };
 
-    return { isConnected, yourSeat, sendAction, startGame };
+    return { isConnected, yourSeat, sendAction, sendLog, startGame };
 };

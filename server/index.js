@@ -284,6 +284,12 @@ io.on('connection', (socket) => {
             io.emit('player_left', { seat: player.seat });
         }
     });
+
+    socket.on('client_log', (data) => {
+        const player = gameState.players[socket.id];
+        const prefix = player ? `[CLIENT-Seat${player.seat}]` : `[CLIENT-${socket.id.substring(0, 4)}]`;
+        console.log(`${prefix} ${data.message}`);
+    });
 });
 
 server.listen(PORT, () => {

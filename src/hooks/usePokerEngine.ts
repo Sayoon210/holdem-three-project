@@ -14,7 +14,6 @@ export const usePokerEngine = () => {
     const [potTotal, setPotTotal] = useState(0);
     const [activePlayerId, setActivePlayerId] = useState(0);
     const [highestBet, setHighestBet] = useState(0);
-    const [debugLogs, setDebugLogs] = useState<string[]>([]);
     const [isDebug, setIsDebug] = useState(false);
 
     // --- Local Player State ---
@@ -27,9 +26,13 @@ export const usePokerEngine = () => {
     const [chipConfirmTrigger, setChipConfirmTrigger] = useState(0);
     const [remoteBetTriggers, setRemoteBetTriggers] = useState([0, 0]);
 
+    const { isConnected, yourSeat, sendAction, sendLog, startGame } = usePokerSocket((data: any) => {
+        handleRemoteAction(data);
+    });
+
     const addLog = useCallback((msg: string) => {
-        setDebugLogs(prev => [...prev.slice(-99), `[${new Date().toLocaleTimeString()}] ${msg}`]);
-    }, []);
+        sendLog(msg);
+    }, [sendLog]);
 
     // --- Socket Event Handler ---
     const handleRemoteAction = useCallback((data: any) => {
@@ -80,7 +83,7 @@ export const usePokerEngine = () => {
                     const current = prev[data.seat] || [];
                     if (current.some(c => c.id === data.cardId)) return prev;
 
-                    const dummy: CardData = {
+                    const dummy = {
                         id: data.cardId,
                         rank: '?' as any,
                         suit: '?' as any,
@@ -140,8 +143,6 @@ export const usePokerEngine = () => {
                 break;
         }
     }, [addLog]);
-
-    const { isConnected, yourSeat, sendAction, startGame } = usePokerSocket(handleRemoteAction);
 
     useEffect(() => {
         if (yourSeat !== null) {
@@ -243,7 +244,6 @@ export const usePokerEngine = () => {
         highestBet,
         playerRoundBet,
         isFolded,
-        debugLogs,
         isDebug,
 
         // Triggers

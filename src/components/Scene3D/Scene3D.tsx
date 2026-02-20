@@ -28,7 +28,6 @@ const Scene3D: React.FC = () => {
         activePlayerId,
         playerRoundBet,
         isFolded,
-        debugLogs,
         isDebug,
         chipResetTrigger,
         chipConfirmTrigger,
@@ -197,38 +196,6 @@ const Scene3D: React.FC = () => {
                 >
                     {isDebug ? 'DEBUG: ON' : 'DEBUG: OFF'}
                 </button>
-
-                <div style={{
-                    width: '320px',
-                    maxHeight: '240px',
-                    overflowY: 'auto',
-                    padding: '15px',
-                    background: 'rgba(0, 0, 0, 0.6)',
-                    backdropFilter: 'blur(10px)',
-                    borderRadius: '8px',
-                    border: '1px solid rgba(212, 175, 55, 0.2)',
-                    color: '#fff',
-                    fontSize: '0.8rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                    zIndex: 1000,
-                    scrollbarWidth: 'none'
-                }}>
-                    {debugLogs.length === 0 ? (
-                        <div style={{ color: '#666', fontStyle: 'italic' }}>Waiting for action...</div>
-                    ) : (
-                        debugLogs.map((log: string, i: number) => (
-                            <div key={i} style={{
-                                borderLeft: '2px solid #D4AF37',
-                                paddingLeft: '10px',
-                                opacity: 0.7 + (i / debugLogs.length) * 0.3
-                            }}>
-                                {log}
-                            </div>
-                        ))
-                    )}
-                </div>
             </div>
 
             {/* UI LAYER */}
