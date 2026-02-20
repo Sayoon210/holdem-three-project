@@ -4,7 +4,7 @@ import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import CommunityCardSlots from './CommunityCardSlots';
 
-const Table3D = React.forwardRef<THREE.Group>((props, ref) => {
+const Table3D = React.forwardRef<THREE.Group, any>((props, ref) => {
     // Load the model added by user
     const { scene } = useGLTF('/models/pokertable_round/scene.gltf');
 

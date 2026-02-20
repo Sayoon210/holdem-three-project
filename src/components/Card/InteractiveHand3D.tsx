@@ -2,14 +2,14 @@
 
 import React, { useState, useRef, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { RigidBody, RapierRigidBody } from '@react-three/rapier';
+import { RigidBody, RapierRigidBody, CuboidCollider } from '@react-three/rapier';
 import * as THREE from 'three';
 import Card3D from './Card3D';
 import { CardData } from '@/types/card';
 
 
-const FOLD_IMPULSE_Z = -0.2;
-const FOLD_IMPULSE_Y = 0.002;
+const FOLD_IMPULSE_Z = -1.2;
+const FOLD_IMPULSE_Y = 0.5;
 
 interface InteractiveHand3DProps {
     cards: CardData[];
@@ -91,12 +91,12 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({
 
                 refs.forEach((ref) => {
                     ref.applyImpulse({
-                        x: localImpulse.x + (Math.random() - 0.5) * 0.05,
+                        x: localImpulse.x + (Math.random() - 0.5) * 0.1,
                         y: localImpulse.y,
                         z: localImpulse.z
                     }, true);
                     ref.applyTorqueImpulse({
-                        x: -0.002,
+                        x: -0.02,
                         y: (Math.random() - 0.5) * 0.05,
                         z: (Math.random() - 0.5) * 0.01
                     }, true);
@@ -161,13 +161,15 @@ const InteractiveHand3D: React.FC<InteractiveHand3DProps> = ({
                             ref={(el) => { thrownCardsRef.current[index] = el; }}
                             position={[index * 0.1, 0.1, 0]} // Relative to groupRef which is at dragPos
                             rotation={[Math.PI / 2, 0, 0]}
-                            colliders="cuboid"
+                            colliders={false}
                             restitution={0.3}
                             friction={4.0}
                             linearDamping={4.0}
                             angularDamping={0.5}
                             collisionGroups={0x00040005}
+                            ccd={true}
                         >
+                            <CuboidCollider args={[0.5, 0.7, 0.05]} />
                             <Card3D
                                 rank={card.rank}
                                 suit={card.suit}

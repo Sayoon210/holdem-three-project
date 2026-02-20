@@ -45,7 +45,7 @@ const Scene3D: React.FC = () => {
         highestBet
     } = usePokerEngine();
 
-    const tableRef = React.useRef<THREE.Group>(null);
+    const tableRef = React.useRef<THREE.Group | null>(null);
 
     return (
         <div style={{ width: '100vw', height: '100vh', background: '#000', position: 'relative', overflow: 'hidden' }}>
@@ -76,9 +76,7 @@ const Scene3D: React.FC = () => {
                     <ContactShadows opacity={0.4} scale={15} blur={2.4} far={4.5} resolution={1024} color="#000000" />
 
                     <Physics debug={isDebug}>
-                        <EffectComposer disableNormalPass>
-                            <Bloom luminanceThreshold={0.8} luminanceSmoothing={0.9} height={300} intensity={0.5} />
-                        </EffectComposer>
+                        {/* Removed duplicate EffectComposer that causes visual bugs */}
                         {/* TABLE UNIT [z = -3] */}
                         <group position={[0, 0, -3]}>
                             <spotLight
@@ -132,39 +130,35 @@ const Scene3D: React.FC = () => {
                             enabled={yourSeat === 1 && activePlayerId === 1}
                         />
 
-                        {/* Pot Area Betting Zone */}
+                        {/* Seat 0 Pot Area Betting Zone (ㄷ shape facing South/Seat 0) */}
                         <RigidBody type="fixed" colliders="cuboid" collisionGroups={0x00010007}>
                             <mesh position={[0, 0.2, -1.5]}>
                                 <boxGeometry args={[3.0, 0.6, 0.05]} />
-                                <meshStandardMaterial
-                                    color={isDebug ? "red" : "white"}
-                                    transparent
-                                    opacity={isDebug ? 0.3 : 0}
-                                />
+                                <meshStandardMaterial color={isDebug ? "red" : "white"} transparent opacity={isDebug ? 0.3 : 0} />
                             </mesh>
                             <mesh position={[-1.5, 0.2, 0]}>
                                 <boxGeometry args={[0.05, 0.6, 3.0]} />
-                                <meshStandardMaterial
-                                    color={isDebug ? "red" : "white"}
-                                    transparent
-                                    opacity={isDebug ? 0.3 : 0}
-                                />
+                                <meshStandardMaterial color={isDebug ? "red" : "white"} transparent opacity={isDebug ? 0.3 : 0} />
                             </mesh>
                             <mesh position={[1.5, 0.2, 0]}>
                                 <boxGeometry args={[0.05, 0.6, 3.0]} />
-                                <meshStandardMaterial
-                                    color={isDebug ? "red" : "white"}
-                                    transparent
-                                    opacity={isDebug ? 0.3 : 0}
-                                />
+                                <meshStandardMaterial color={isDebug ? "red" : "white"} transparent opacity={isDebug ? 0.3 : 0} />
                             </mesh>
                         </RigidBody>
 
-                        {/* Global Physics Floor */}
-                        <RigidBody type="fixed" colliders="cuboid" friction={2.0} restitution={0.2} position={[0, -0.01, 0]} collisionGroups={0x00010007}>
-                            <mesh visible={isDebug}>
-                                <boxGeometry args={[20, 0.05, 20]} />
-                                <meshStandardMaterial color="red" transparent opacity={0.3} />
+                        {/* Seat 1 Pot Area Betting Zone (ㄷ shape facing North/Seat 1) */}
+                        <RigidBody type="fixed" colliders="cuboid" collisionGroups={0x00010007}>
+                            <mesh position={[0, 0.2, -4.5]}>
+                                <boxGeometry args={[3.0, 0.6, 0.05]} />
+                                <meshStandardMaterial color={isDebug ? "blue" : "white"} transparent opacity={isDebug ? 0.3 : 0} />
+                            </mesh>
+                            <mesh position={[-1.5, 0.2, -6.0]}>
+                                <boxGeometry args={[0.05, 0.6, 3.0]} />
+                                <meshStandardMaterial color={isDebug ? "blue" : "white"} transparent opacity={isDebug ? 0.3 : 0} />
+                            </mesh>
+                            <mesh position={[1.5, 0.2, -6.0]}>
+                                <boxGeometry args={[0.05, 0.6, 3.0]} />
+                                <meshStandardMaterial color={isDebug ? "blue" : "white"} transparent opacity={isDebug ? 0.3 : 0} />
                             </mesh>
                         </RigidBody>
                     </Physics>
@@ -172,7 +166,7 @@ const Scene3D: React.FC = () => {
 
                 {/* Post-processing setup */}
                 <EffectComposer>
-                    <Bloom intensity={0.5} luminanceThreshold={0.8} mipmapBlur radius={0.6} />
+                    <Bloom luminanceThreshold={0.8} luminanceSmoothing={0.9} height={300} intensity={0.5} mipmapBlur radius={0.6} />
                     <Noise opacity={0.015} />
                     <Vignette eskil={false} offset={0.1} darkness={1.1} />
                 </EffectComposer>

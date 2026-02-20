@@ -69,6 +69,10 @@ export const usePokerSocket = (onRemoteAction: (action: any) => void) => {
             actionRef.current?.({ type: 'turn_change', ...data });
         });
 
+        socket.on('debug_log', (data: { message: string }) => {
+            actionRef.current?.({ type: 'debug_log', message: data.message });
+        });
+
         socket.on('disconnect', () => {
             console.log('[SOCKET] Disconnected');
             setIsConnected(false);

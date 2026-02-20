@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const { evaluateHand } = require('./handEvaluator');
 
 const app = express();
 app.use(cors());
@@ -69,7 +70,25 @@ let gameState = {
     activeSeat: 0,
     highestBet: 0,
     roundBets: {}, // socket.id -> current round bet
-    roundActionCount: 0
+    roundActionCount: 0,
+    holeCards: {} // seatIndex -> array of cards
+};
+
+const evaluateAndNotify = () => {
+    gameState.seats.forEach((socketId, seatIdx) => {
+        if (!socketId) return;
+        const pCards = gameState.holeCards[seatIdx] || [];
+        const publicCards = gameState.communityCards.filter(c => !c.isFaceDown);
+        const allCards = [...pCards, ...publicCards];
+
+        if (allCards.length > 0) {
+            const evalResult = evaluateHand(allCards);
+            // Send personalized debug log
+            io.to(socketId).emit('debug_log', {
+                message: `[EVAL] Your current hand: ${evalResult.name}`
+            });
+        }
+    });
 };
 
 io.on('connection', (socket) => {
@@ -111,9 +130,9 @@ io.on('connection', (socket) => {
         gameState.deck = shuffleDeck(rawDeck);
 
         console.log('[DECK] Shuffled 52 cards.');
-        console.log('[DEBUG] Top 10 cards in deck:', gameState.deck.slice(-10).reverse().map(c => `${c.rank}${c.suit}`).join(', '));
 
         gameState.communityCards = [];
+        gameState.holeCards = {};
         gameState.visibleBoardCount = 0;
 
         io.emit('game_stage_change', { stage: 'DEALING' });
@@ -128,6 +147,8 @@ io.on('connection', (socket) => {
                 }
 
                 const card = gameState.deck.pop();
+                if (!gameState.holeCards[seatIdx]) gameState.holeCards[seatIdx] = [];
+                gameState.holeCards[seatIdx].push(card);
                 console.log(`[DEAL] Card ${card.rank}${card.suit} (ID: ${card.id}) -> Seat ${seatIdx} (Round ${round + 1})`);
 
                 // 1A. Send REAL info to the owner
@@ -169,6 +190,8 @@ io.on('connection', (socket) => {
         io.emit('turn_change', { seat: gameState.activeSeat });
         io.emit('highest_bet_update', { highestBet: 0 });
         console.log('===== STAGE: PLAYING (Turn: 0) =====\n');
+
+        evaluateAndNotify();
     });
 
     socket.on('player_action', (data) => {
@@ -237,6 +260,8 @@ io.on('connection', (socket) => {
                 io.emit('new_round', { stage: 'FLOP', activeSeat: 1 });
                 io.emit('turn_change', { seat: gameState.activeSeat });
                 console.log('[ROUND] Flop Revealed. Seat 1 to act.');
+
+                evaluateAndNotify();
                 return;
             }
         }

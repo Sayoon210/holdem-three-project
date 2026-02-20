@@ -125,11 +125,18 @@ export const usePokerEngine = () => {
             case 'hand_ended':
                 addLog(`*** HAND ENDED *** Winner: Seat ${data.winner}, Pot: $${data.pot}`);
                 setGameStage('WAITING');
-                setCommunityCards([]);
-                setPlayersHoleCards({});
-                setPotTotal(0);
+                if (data.revealedCards) {
+                    // Update state to show all revealed cards
+                    setPlayersHoleCards(data.revealedCards);
+                }
+                // Do not clear the community cards and pot immediately so players can see the result.
+                // State will be cleared on the next 'deal_notify' or 'stage_change' -> 'DEALING'.
                 setPlayerRoundBet(0);
                 setPreviousConfirmedBet(0);
+                break;
+
+            case 'debug_log':
+                addLog(data.message);
                 break;
         }
     }, [addLog]);
