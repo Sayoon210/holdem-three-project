@@ -18,6 +18,7 @@ interface InteractiveChip3DProps {
     throwThreshold?: number; // Local Z-coordinate for betting detection
     enabled?: boolean; // Turn-based control
     remoteBetTrigger?: number; // Trigger programmatic bet
+    bettingTargetPos?: [number, number, number]; // Target pot position
 }
 
 const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({
@@ -30,7 +31,8 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({
     index = 0,
     throwThreshold: propThreshold,
     enabled = true,
-    remoteBetTrigger
+    remoteBetTrigger,
+    bettingTargetPos = [0, 0, 0]
 }) => {
     const { camera, raycaster, mouse } = useThree();
     const [isDragging, setIsDragging] = useState(false);
@@ -64,7 +66,7 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({
 
     const TRAY_SIZE = 3.0; // Increased boundary for smoother drag in larger tray
     const localThrowThreshold = propThreshold !== undefined ? propThreshold : -1.1;
-    const bettingTarget = new THREE.Vector3(0, 0, 0);
+    const bettingTarget = useMemo(() => new THREE.Vector3(...bettingTargetPos), [bettingTargetPos[0], bettingTargetPos[1], bettingTargetPos[2]]);
     const physicsWait = useRef(-1);
     const lastResetTrigger = useRef(resetTrigger);
     const lastConfirmTrigger = useRef(confirmTrigger);
@@ -125,8 +127,30 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({
         // REMOTE ACTION LOGIC (Simulation)
         if (remoteBetTrigger !== undefined && remoteBetTrigger !== lastRemoteBetTrigger.current) {
             lastRemoteBetTrigger.current = remoteBetTrigger;
-            if (!isBet && !isDragging) {
-                // Programmatically trigger bet
+            if (!isDragging) {
+                // Programmatically trigger bet (re-use even if isBet=true)
+                impulseApplied.current = false;
+                betSignaledRef.current = false;
+
+                // Teleport to Toss Position first (like local dragging)
+                const startX = trayPos ? trayPos[0] : (Math.random() - 0.5);
+                const localTossTarget = new THREE.Vector3(startX, 1.25, localThrowThreshold - 0.2);
+                const worldTossTarget = localTossTarget.clone();
+                if (outerGroupRef.current) {
+                    outerGroupRef.current.localToWorld(worldTossTarget);
+                }
+
+                if (rigidBodyRef.current) {
+                    rigidBodyRef.current.setTranslation({
+                        x: worldTossTarget.x,
+                        y: worldTossTarget.y,
+                        z: worldTossTarget.z
+                    }, true);
+
+                    rigidBodyRef.current.setBodyType(0, true);
+                    rigidBodyRef.current.wakeUp();
+                }
+
                 setIsBet(true);
                 physicsWait.current = 4;
             }
@@ -162,7 +186,7 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({
 
                     // Physical Toss Position (World)
                     // We target further forward in local space then convert back to world
-                    const localTossTarget = new THREE.Vector3(0, 1.25, localThrowThreshold - 0.2);
+                    const localTossTarget = new THREE.Vector3(localPos.x, 1.25, localThrowThreshold - 0.2);
                     const worldTossTarget = localTossTarget.clone();
                     if (outerGroupRef.current) {
                         outerGroupRef.current.localToWorld(worldTossTarget);
@@ -191,16 +215,28 @@ const InteractiveChip3D: React.FC<InteractiveChip3DProps> = ({
 
             if (physicsWait.current === 0 && !impulseApplied.current && rigidBodyRef.current) {
                 const currentPos = rigidBodyRef.current.translation();
+
+                // Add a random scatter so overlapping chips spread out visually
+                const scatterX = (Math.random() - 0.5) * 1.0;
+                const scatterZ = (Math.random() - 0.5) * 1.0;
+
+                // Target in WORLD space
+                const actualTargetWorld = new THREE.Vector3(bettingTarget.x + scatterX, bettingTarget.y, bettingTarget.z + scatterZ);
+
+                // Convert World Target to Local Space of the Player Seat
+                // REMOVED (because currentPos is already World space from Rapier!)
+
+                // Vector from current WORLD pos to WORLD target
                 const dir = tempVec
-                    .copy(bettingTarget)
-                    .sub(tempTarget.set(currentPos.x, 0, currentPos.z))
+                    .copy(actualTargetWorld)
+                    .sub(tempTarget.set(currentPos.x, currentPos.y, currentPos.z))
                     .normalize();
 
-                const speed = 7.0;
+                const speed = 5.5; // Smoother visual tracking speed
 
                 rigidBodyRef.current.setLinvel({
                     x: dir.x * speed,
-                    y: 0.4, // Increased vertical bounce slightly
+                    y: 2.2, // High arc for better visibility from opponent side
                     z: dir.z * speed
                 }, true);
 

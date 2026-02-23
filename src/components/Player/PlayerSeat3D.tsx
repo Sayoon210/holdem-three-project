@@ -20,6 +20,7 @@ interface PlayerSeat3DProps {
     remoteBetTrigger?: number;
     enabled?: boolean;
     isLocal?: boolean;
+    bettingTargetPos?: [number, number, number];
 }
 
 const CHIP_POSITIONS = [
@@ -43,7 +44,8 @@ const PlayerSeat3D: React.FC<PlayerSeat3DProps> = ({
     deckPosition,
     remoteBetTrigger,
     enabled = true,
-    isLocal = false
+    isLocal = false,
+    bettingTargetPos = [0, 0, 0]
 }) => {
     const chipData = React.useMemo(() => {
         return CHIP_POSITIONS.flatMap((stack, groupIndex) => {
@@ -69,13 +71,29 @@ const PlayerSeat3D: React.FC<PlayerSeat3DProps> = ({
 
     // Logic to pick which chip to throw for remote bet
     const lastRemoteTrigger = useRef(remoteBetTrigger);
-    const [targetChipIndex, setTargetChipIndex] = useState(-1);
+    const [chipTriggers, setChipTriggers] = useState<Record<number, number>>({});
 
     React.useEffect(() => {
-        if (remoteBetTrigger !== undefined && remoteBetTrigger !== lastRemoteTrigger.current) {
+        if (remoteBetTrigger !== undefined && remoteBetTrigger > (lastRemoteTrigger.current || 0)) {
+            const baseTrigger = lastRemoteTrigger.current || 0;
+            const diff = remoteBetTrigger - baseTrigger;
             lastRemoteTrigger.current = remoteBetTrigger;
-            // Pick a chip that isn't bet yet (simplified: pick next in sequence)
-            setTargetChipIndex((prev: number) => (prev + 1) % chipData.length);
+
+            // Loop and throw `diff` chips with a small delay for realistic physics animation
+            let thrown = 0;
+            const interval = setInterval(() => {
+                const newTriggerId = baseTrigger + thrown + 1;
+                const chipIndex = (baseTrigger + thrown) % chipData.length;
+
+                setChipTriggers(prev => ({ ...prev, [chipIndex]: newTriggerId }));
+
+                thrown++;
+                if (thrown >= diff) clearInterval(interval);
+            }, 100); // 100ms throw interval
+
+            return () => clearInterval(interval);
+        } else if (remoteBetTrigger !== undefined) {
+            lastRemoteTrigger.current = remoteBetTrigger;
         }
     }, [remoteBetTrigger, chipData.length]);
 
@@ -105,7 +123,8 @@ const PlayerSeat3D: React.FC<PlayerSeat3DProps> = ({
                             confirmTrigger={confirmTrigger}
                             throwThreshold={localThreshold}
                             enabled={enabled}
-                            remoteBetTrigger={targetChipIndex === idx ? remoteBetTrigger : undefined}
+                            remoteBetTrigger={chipTriggers[idx]}
+                            bettingTargetPos={bettingTargetPos}
                         />
                     );
                 })}

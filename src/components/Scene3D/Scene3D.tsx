@@ -110,6 +110,7 @@ const Scene3D: React.FC = () => {
                             isDebug={isDebug}
                             deckPosition={DECK_POSITION}
                             enabled={yourSeat === 0 && activePlayerId === 0}
+                            bettingTargetPos={[0, 0.2, -1.5]}
                         />
 
                         {/* SEAT 1: North [z = -9.5] */}
@@ -127,6 +128,7 @@ const Scene3D: React.FC = () => {
                             isDebug={isDebug}
                             deckPosition={DECK_POSITION}
                             enabled={yourSeat === 1 && activePlayerId === 1}
+                            bettingTargetPos={[0, 0.2, -4.5]}
                         />
 
                         {/* Seat 0 Pot Area Betting Zone (ㄷ shape facing South/Seat 0) */}

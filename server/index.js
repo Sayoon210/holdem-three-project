@@ -230,6 +230,9 @@ io.on('connection', (socket) => {
         io.emit('pot_update', { pot: gameState.pot });
         io.emit('highest_bet_update', { highestBet: gameState.highestBet });
 
+        // Broadcast right away so clients can animate IT immediately!
+        socket.broadcast.emit('remote_action', data);
+
         // Update action count
         gameState.roundActionCount++;
 
@@ -239,31 +242,33 @@ io.on('connection', (socket) => {
         const everyoneActed = gameState.roundActionCount >= activeSids.length;
 
         if (everyoneActed && allBalanced) {
-            console.log('\n[ROUND] Round complete! Transitioning...');
+            console.log('\n[ROUND] Round complete! Waiting for animations before transitioning...');
 
-            // Reveal Flop (if hidden)
-            if (gameState.communityCards[0].isFaceDown) {
-                for (let i = 0; i < 3; i++) {
-                    gameState.communityCards[i].isFaceDown = false;
+            setTimeout(() => {
+                // Reveal Flop (if hidden)
+                if (gameState.communityCards[0].isFaceDown) {
+                    for (let i = 0; i < 3; i++) {
+                        gameState.communityCards[i].isFaceDown = false;
+                    }
+                    io.emit('deal_public', { cards: gameState.communityCards });
+
+                    // Reset for next betting round
+                    gameState.roundActionCount = 0;
+                    gameState.highestBet = 0;
+                    gameState.roundBets = {};
+
+                    // Heads-up: Post-flop, Seat 1 (BB) starts
+                    gameState.activeSeat = 1;
+
+                    io.emit('highest_bet_update', { highestBet: 0 });
+                    io.emit('new_round', { stage: 'FLOP', activeSeat: 1 });
+                    io.emit('turn_change', { seat: gameState.activeSeat });
+                    console.log('[ROUND] Flop Revealed. Seat 1 to act.');
+
+                    evaluateAndNotify();
                 }
-                io.emit('deal_public', { cards: gameState.communityCards });
-
-                // Reset for next betting round
-                gameState.roundActionCount = 0;
-                gameState.highestBet = 0;
-                gameState.roundBets = {};
-
-                // Heads-up: Post-flop, Seat 1 (BB) starts
-                gameState.activeSeat = 1;
-
-                io.emit('highest_bet_update', { highestBet: 0 });
-                io.emit('new_round', { stage: 'FLOP', activeSeat: 1 });
-                io.emit('turn_change', { seat: gameState.activeSeat });
-                console.log('[ROUND] Flop Revealed. Seat 1 to act.');
-
-                evaluateAndNotify();
-                return;
-            }
+            }, 1500); // 1.5초 지연 대기
+            return;
         }
 
         // Standard Turn Rotation
@@ -271,8 +276,6 @@ io.on('connection', (socket) => {
             io.emit('turn_change', { seat: gameState.activeSeat });
             console.log(`[TURN] Moved to Seat ${gameState.activeSeat}`);
         }
-
-        socket.broadcast.emit('remote_action', data);
     });
 
     socket.on('disconnect', () => {

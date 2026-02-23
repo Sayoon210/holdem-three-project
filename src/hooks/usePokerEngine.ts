@@ -38,12 +38,22 @@ export const usePokerEngine = () => {
     const handleRemoteAction = useCallback((data: any) => {
         switch (data.type) {
             case 'bet':
+            case 'call':
+            case 'raise': {
+                const amount = data.amount || 0;
+                // Since 1 chip = $100 locally, calculate how many chips to throw for the remote player
+                const chipsToThrow = Math.max(1, Math.floor(amount / 100));
                 setRemoteBetTriggers(prev => {
                     const next = [...prev];
-                    next[data.seat] += 1;
+                    next[data.seat] += chipsToThrow;
                     return next;
                 });
-                addLog(`Remote player (Seat ${data.seat}) bet!`);
+                addLog(`Remote player (Seat ${data.seat}) ${data.type.toUpperCase()} ${amount > 0 ? `$${amount}` : ''}`);
+                break;
+            }
+
+            case 'check':
+                addLog(`Remote player (Seat ${data.seat}) CHECKED.`);
                 break;
 
             case 'fold':
@@ -205,7 +215,7 @@ export const usePokerEngine = () => {
         const callAmount = highestBet - playerRoundBet;
         addLog(`Calling: $${callAmount}`);
         if (yourSeat !== null) {
-            sendAction({ type: 'call', seat: yourSeat });
+            sendAction({ type: 'call', seat: yourSeat, amount: callAmount });
         }
         setPlayerRoundBet(highestBet);
     }, [addLog, highestBet, playerRoundBet, sendAction, yourSeat]);
